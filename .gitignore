@@ -1,0 +1,16 @@
+# Osobní údaje – do gitu nikdy:
+# faktury, kontakty, PDF, zálohy, log serveru
+data/
+# PDF faktur kdekoli mimo data/ (např. podklady k importu)
+*.pdf
+# podklady k importu (import_data.py)
+/*.json
+
+# Spouštěč se vytváří skriptem instalovat.sh
+Faktury.app/
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+.claude/settings.local.json

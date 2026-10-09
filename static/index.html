@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <title>Faktury</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <a class="skip" href="#app">Přeskočit na obsah</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#/prehled" translate="no"><img src="icon.svg" alt="" width="22" height="22">Faktury</a>
+      <nav aria-label="Hlavní navigace">
+        <a href="#/prehled" data-nav="prehled">Přehled</a>
+        <a href="#/faktury" data-nav="faktur">Faktury</a>
+        <a href="#/kontakty" data-nav="kontakt">Kontakty</a>
+        <a href="#/nastaveni" data-nav="nastaveni">Nastavení</a>
+      </nav>
+    </div>
+  </header>
+  <main id="app" tabindex="-1"></main>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="vendor/pdfmake.min.js"></script>
+  <script src="vendor/vfs_fonts.js"></script>
+  <script src="invoice-pdf.js"></script>
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
