@@ -187,6 +187,12 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--a
 input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; min-height: 0; margin: 0; accent-color: var(--accent); flex: none; }
 input[type="checkbox"]:focus, input[type="radio"]:focus { box-shadow: none; }
 textarea { resize: vertical; min-height: 64px; }
+input[type="file"] { padding: 6px; font-size: 14px; color: var(--muted); cursor: pointer; }
+input[type="file"]::file-selector-button {
+  font: inherit; font-weight: 500; color: var(--text); background: var(--fill); border: 0; border-radius: 7px;
+  padding: 4px 12px; margin-right: 10px; cursor: pointer; transition: background-color 0.15s;
+}
+input[type="file"]:hover::file-selector-button { background: var(--fill-strong); }
 select {
   -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 32px;
   background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238e8e93' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
@@ -270,6 +276,7 @@ a.kpi:hover { text-decoration: none; background: var(--card-hover); }
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
 .card-head h2 { margin: 0; }
 .card-head .muted { font-size: 13px; }
+.table-card > .card-head { align-items: center; padding: 14px 16px 2px; margin: 0; }
 
 /* sloupcový graf */
 .colchart { position: relative; }

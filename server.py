@@ -19,6 +19,7 @@ PORT = int(os.environ.get("FAKTURY_PORT", "8765"))
 STATIC = db.ROOT / "static"
 ALLOWED_HOSTS = {f"localhost:{PORT}", f"127.0.0.1:{PORT}"}
 MAX_UPLOAD = 25 * 1024 * 1024
+DOC_TYPES = ("application/pdf", "image/png", "image/jpeg")  # doklady k příjmům bez faktury
 
 
 def ares_lookup(ico):
@@ -165,12 +166,13 @@ class Handler(BaseHTTPRequestHandler):
         if res == "ares" and method == "GET" and rid is not None:
             return self.send_json(ares_lookup(str(rid)))
 
-        body = self.read_json() if method in ("POST", "PUT") and sub != "pdf" else None
-        pdf = self.read_pdf() if method == "PUT" and sub == "pdf" else None
+        upload = method == "PUT" and sub in ("pdf", "doc")
+        body = self.read_json() if method in ("POST", "PUT") and not upload else None
+        content = self.read_upload(sub) if upload else None
         status, headers = 200, None
         # Odpověď se pošle až po úspěšném uložení – při chybě se neuloží nic.
         with db.open_data(write=method != "GET") as data:
-            result = self.route(data, method, res, rid, sub, body, pdf)
+            result = self.route(data, method, res, rid, sub, body, content)
         if result is None:
             return self.send_error_json(404, "Neznámá adresa.")
         if isinstance(result, tuple):
@@ -181,13 +183,14 @@ class Handler(BaseHTTPRequestHandler):
             result = {"ok": True}
         self.send_json(result, status, headers)
 
-    def read_pdf(self):
-        if self.headers.get("Content-Type") != "application/pdf":
-            raise ValueError("Očekávám PDF.")
+    def read_upload(self, sub):
+        allowed = DOC_TYPES if sub == "doc" else ("application/pdf",)
+        if self.headers.get("Content-Type") not in allowed:
+            raise ValueError("Doklad musí být PDF, PNG nebo JPG." if sub == "doc" else "Očekávám PDF.")
         return self.read_body()
 
     @staticmethod
-    def route(data, method, res, rid, sub, body, pdf):
+    def route(data, method, res, rid, sub, body, content):
         if res == "settings":
             if method == "GET":
                 return db.get_settings(data)
@@ -226,9 +229,25 @@ class Handler(BaseHTTPRequestHandler):
                 if sub == "status" and method == "POST":
                     return db.set_status(data, rid, body.get("status"), body.get("paid_date"))
                 if sub == "pdf" and method == "PUT":
-                    return {"pdf_file": db.store_pdf(data, rid, pdf)}
+                    return {"pdf_file": db.store_pdf(data, rid, content)}
                 if sub == "reveal" and method == "POST":
                     return db.get_invoice(data, rid)
+
+        elif res == "incomes":
+            if method == "GET" and rid is None:
+                return db.list_incomes(data)
+            if method == "POST" and rid is None:
+                return db.save_income(data, body), 201, None
+            if isinstance(rid, int):
+                if sub is None and method == "GET":
+                    return db.get_income(data, rid)
+                if sub is None and method == "PUT":
+                    return db.save_income(data, body, rid)
+                if sub is None and method == "DELETE":
+                    db.delete_income(data, rid)
+                    return {"ok": True}
+                if sub == "doc" and method == "PUT":
+                    return db.store_income_doc(data, rid, content)
 
         elif res == "next-number" and method == "GET":
             return {"number": db.next_number(data)}

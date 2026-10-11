@@ -6,6 +6,7 @@ import re
 import shutil
 import sys
 import threading
+import unicodedata
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -47,6 +48,8 @@ SUPPLIER_FIELDS = ("name", "street", "city", "zip", "ico", "registration", "acco
 CUSTOMER_FIELDS = ("name", "ico", "dic", "street", "city", "zip", "country", "email")
 CONTACT_FIELDS = CUSTOMER_FIELDS + ("note",)
 STATUSES = ("issued", "paid", "cancelled")
+# Doklad k příjmu bez faktury: rozpozná se podle začátku souboru.
+DOC_KINDS = ((b"%PDF", ".pdf"), (b"\x89PNG", ".png"), (b"\xff\xd8\xff", ".jpg"))
 
 _lock = threading.Lock()
 
@@ -57,15 +60,17 @@ def init():
     DATA.mkdir(exist_ok=True)
     ARCHIV.mkdir(exist_ok=True)
     if not DATA_FILE.exists():
-        _save({"settings": dict(DEFAULT_SETTINGS), "contacts": [], "invoices": []})
+        _save({"settings": dict(DEFAULT_SETTINGS), "contacts": [], "invoices": [], "incomes": []})
 
 
 def _load():
     try:
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        data = json.loads(DATA_FILE.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise RuntimeError(f"Soubor {DATA_FILE.name} je poškozený ({e}). "
                            f"Obnov ho z poslední zálohy ve složce data/zalohy.")
+    data.setdefault("incomes", [])  # starší data příjmy bez faktury ještě nemají
+    return data
 
 
 def _save(data):
@@ -206,6 +211,15 @@ def _find(rows, rid, label):
         if r["id"] == rid:
             return r
     raise LookupError(f"{label} neexistuje.")
+
+
+def _trash(name):
+    """Soubor z archivu se nemaže, jen přesune do data/smazane."""
+    path = ARCHIV / name
+    if path.exists():
+        SMAZANE.mkdir(exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        shutil.move(path, SMAZANE / f"{stamp}-{path.name}")
 
 
 def pdf_name(number, issue_date):
@@ -444,10 +458,73 @@ def delete_invoice(data, iid):
     """Smaže fakturu z evidence. Její PDF se nemaže, jen přesune do data/smazane."""
     inv = get_invoice(data, iid)
     data["invoices"].remove(inv)
-    if inv["pdf_file"] and (ARCHIV / inv["pdf_file"]).exists():
-        SMAZANE.mkdir(exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        shutil.move(ARCHIV / inv["pdf_file"], SMAZANE / f"{stamp}-{Path(inv['pdf_file']).name}")
+    if inv["pdf_file"]:
+        _trash(inv["pdf_file"])
+
+
+# ---------- příjmy bez faktury ----------
+
+def list_incomes(data):
+    return sorted(data["incomes"], key=lambda i: (i["date"], i["id"]), reverse=True)
+
+
+def get_income(data, iid):
+    return _find(data["incomes"], iid, "Příjem")
+
+
+def save_income(data, values, iid=None):
+    """Příjem, ke kterému jsi nevystavil fakturu (vyúčtování, honorář…).
+    Do limitů se počítá podle data přijetí, stejně jako zaplacené faktury."""
+    existing = get_income(data, iid) if iid is not None else None
+    received = _date(values.get("date"), "Datum přijetí")
+    amount = _decimal(values.get("amount") or 0, "Částka")
+    if not amount.is_finite() or amount <= 0:
+        raise ValueError("Částka musí být větší než nula.")
+    payer = _text(values.get("payer"))
+    if not payer:
+        raise ValueError("Vyplň, od koho peníze přišly.")
+    fields = {
+        "date": received,
+        "amount": _money(amount),
+        "payer": payer,
+        "description": _text(values.get("description")),
+        "updated_at": _now(),
+    }
+    if existing:
+        existing.update(fields)
+        return existing
+    income = {"id": _next_id(data["incomes"]), **fields, "doc_file": None, "created_at": _now()}
+    data["incomes"].append(income)
+    return income
+
+
+def store_income_doc(data, iid, content):
+    """Uloží doklad k příjmu (PDF, PNG, JPG) do archivu: data/archiv/ROK/Prijem-DATUM-PLÁTCE.pdf.
+    Předchozí doklad se přesune do data/smazane."""
+    income = get_income(data, iid)
+    ext = next((e for magic, e in DOC_KINDS if content.startswith(magic)), None)
+    if not ext:
+        raise ValueError("Doklad musí být PDF, PNG nebo JPG.")
+    payer = unicodedata.normalize("NFKD", income["payer"]).encode("ascii", "ignore").decode()
+    safe = re.sub(r"[^\w.-]+", "-", payer, flags=re.ASCII).strip("-.")[:40]
+    stem = f"{income['date'][:4]}/Prijem-{income['date']}-{safe or income['id']}"
+    if any(i is not income and (i["doc_file"] or "").startswith(stem + ".") for i in data["incomes"]):
+        stem += f"-{income['id']}"
+    if income["doc_file"]:
+        _trash(income["doc_file"])
+    path = ARCHIV / (stem + ext)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    income["doc_file"] = stem + ext
+    income["updated_at"] = _now()
+    return income
+
+
+def delete_income(data, iid):
+    income = get_income(data, iid)
+    data["incomes"].remove(income)
+    if income["doc_file"]:
+        _trash(income["doc_file"])
 
 
 def _number_parts(number, year):

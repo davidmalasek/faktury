@@ -191,6 +191,37 @@ class DataTests(TempData):
         self.assertFalse((db.ARCHIV / name).exists())
         self.assertEqual(len(list(db.SMAZANE.iterdir())), 1)
 
+    def test_income_without_invoice(self):
+        received = {"date": f"{YEAR}-05-04", "amount": "12 381", "payer": " Pořadatel s.r.o. "}
+        with db.open_data(True) as data:
+            with self.assertRaisesRegex(ValueError, "větší než nula"):
+                db.save_income(data, {**received, "amount": ""})
+            with self.assertRaisesRegex(ValueError, "od koho"):
+                db.save_income(data, {**received, "payer": ""})
+            with self.assertRaisesRegex(ValueError, "neplatné datum"):
+                db.save_income(data, {**received, "date": ""})
+            inc = db.save_income(data, received)
+            self.assertEqual((inc["amount"], inc["payer"], inc["doc_file"]), (12381.0, "Pořadatel s.r.o.", None))
+            with self.assertRaisesRegex(ValueError, "PDF, PNG nebo JPG"):
+                db.store_income_doc(data, inc["id"], b"nope")
+            db.store_income_doc(data, inc["id"], b"%PDF-1.4 a")
+            self.assertEqual(inc["doc_file"], f"{YEAR}/Prijem-{YEAR}-05-04-Poradatel-s.r.o.pdf")
+            db.store_income_doc(data, inc["id"], b"\x89PNG b")  # nový doklad nahradí starý
+            self.assertEqual(inc["doc_file"], f"{YEAR}/Prijem-{YEAR}-05-04-Poradatel-s.r.o.png")
+            other = db.save_income(data, received)  # stejný den i plátce → jiný název souboru
+            db.store_income_doc(data, other["id"], b"\x89PNG c")
+            self.assertEqual(other["doc_file"], f"{YEAR}/Prijem-{YEAR}-05-04-Poradatel-s.r.o-{other['id']}.png")
+            db.delete_income(data, inc["id"])
+            self.assertEqual([i["id"] for i in db.list_incomes(data)], [other["id"]])
+        self.assertEqual((db.ARCHIV / other["doc_file"]).read_bytes(), b"\x89PNG c")
+        self.assertFalse((db.ARCHIV / f"{YEAR}/Prijem-{YEAR}-05-04-Poradatel-s.r.o.png").exists())
+        self.assertEqual(len(list(db.SMAZANE.iterdir())), 2)  # nic se nemaže natrvalo
+
+    def test_old_data_without_incomes(self):
+        db.DATA_FILE.write_text(json.dumps({"settings": {}, "contacts": [], "invoices": []}), encoding="utf-8")
+        with db.open_data() as data:
+            self.assertEqual(db.list_incomes(data), [])
+
     def test_backup_before_first_change_of_day(self):
         with db.open_data(True) as data:
             db.save_settings(data, {"name": "A"})
@@ -268,6 +299,20 @@ class ServerTests(TempData):
         self.assertEqual(status, 400)
         self.assertIn("už existuje", body["error"])
         self.assertEqual(self.call("GET", "/api/invoices/999")[0], 404)
+
+    def test_income_flow(self):
+        status, inc = self.call("POST", "/api/incomes", {"date": f"{YEAR}-05-04", "amount": "12381", "payer": "Pořadatel"})
+        self.assertEqual((status, inc["amount"]), (201, 12381.0))
+        status, body = self.call("PUT", f"/api/incomes/{inc['id']}/doc", b"GIF89a", ctype="image/gif")
+        self.assertEqual(status, 400)
+        self.assertIn("PDF, PNG nebo JPG", body["error"])
+        status, inc = self.call("PUT", f"/api/incomes/{inc['id']}/doc", b"\xff\xd8\xff jpg", ctype="image/jpeg")
+        self.assertEqual((status, inc["doc_file"]), (200, f"{YEAR}/Prijem-{YEAR}-05-04-Poradatel.jpg"))
+        self.assertEqual(len(self.call("GET", "/api/incomes")[1]), 1)
+        self.assertEqual(self.call("PUT", f"/api/incomes/{inc['id']}", {**inc, "amount": "-5"})[0], 400)
+        self.assertEqual(self.call("DELETE", f"/api/incomes/{inc['id']}")[0], 200)
+        self.assertEqual(self.stored()["incomes"], [])
+        self.assertEqual(self.call("GET", f"/api/incomes/{inc['id']}")[0], 404)
 
     def test_rejects_foreign_sites(self):
         status, _ = self.call("POST", "/api/contacts", {"name": "X"}, headers={"Origin": "https://evil.example"})

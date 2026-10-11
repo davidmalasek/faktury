@@ -21,9 +21,9 @@ Když omylem zakážeš: Nastavení systému → Soukromí a zabezpečení → S
 | Cesta | Co obsahuje |
 |---|---|
 | `data/faktury.json` | faktury, kontakty, nastavení (čitelný text) |
-| `data/archiv/ROK/` | PDF všech faktur |
+| `data/archiv/ROK/` | PDF všech faktur a doklady k příjmům bez faktury |
 | `data/zalohy/` | automatická záloha před první změnou každého dne (30 dní) a před každým importem |
-| `data/smazane/` | PDF smazaných faktur (nic se nemaže natrvalo) |
+| `data/smazane/` | PDF smazaných faktur a dokladů (nic se nemaže natrvalo) |
 | iCloud Drive → `Faktury záloha` | kopie všeho výše, aktualizuje se po každé změně |
 
 Složka `data` se do gitu záměrně neukládá, protože obsahuje osobní údaje klientů.
@@ -36,8 +36,15 @@ Stav zálohy do iCloudu je vidět v Nastavení. Z iCloudu se nic nemaže, kromě
 ## Sociální pojištění (vedlejší činnost)
 
 Přehled hlídá rozhodnou částku. Když zisk za rok dosáhne této částky, musíš platit sociální pojištění.
-Zisk se počítá jako přijaté platby minus výdajový paušál a paušál se nastavuje v Nastavení.
+Zisk se počítá jako přijaté platby (včetně příjmů bez faktury) minus výdajový paušál a paušál se nastavuje v Nastavení.
 Částky jsou v `static/app.js` v konstantě `SOCIAL_LIMITS` a každý rok je potřeba doplnit novou hodnotu (2026: 117 521 Kč).
+
+## Příjmy bez faktury
+
+Peníze, které ti přišly bez vystavené faktury (třeba vyúčtování od pořadatele), zapíšeš přes Faktury → **Příjem bez faktury**.
+Vyplníš datum přijetí, částku a od koho peníze přišly. Volitelně přiložíš doklad (PDF, PNG nebo JPG).
+Takový příjem se nepočítá do číselné řady faktur, ale započítá se do limitu pro sociální pojištění i do obratu pro DPH.
+V Přehledu je vidět v tabulce za daný rok a kliknutím ho upravíš nebo smažeš.
 
 ## Pro vývoj
 

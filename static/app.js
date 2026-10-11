@@ -32,7 +32,7 @@ async function api(path, { method = 'GET', body } = {}) {
   const init = { method, headers: {} };
   if (body instanceof Blob) {
     init.body = body;
-    init.headers['Content-Type'] = 'application/pdf';
+    init.headers['Content-Type'] = body.type || 'application/pdf';
   } else if (body !== undefined) {
     init.body = JSON.stringify(body);
     init.headers['Content-Type'] = 'application/json';
@@ -102,6 +102,7 @@ const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const decimalInput = v => (v === '' || v == null ? '' : String(v).replace('.', ','));
 const byName = (a, b) => a.name.localeCompare(b.name, 'cs', { sensitivity: 'base' });
 const sum = list => list.reduce((s, i) => s + i.total, 0);
+const sumAmount = list => list.reduce((s, i) => s + i.amount, 0); // příjmy bez faktury
 const plural = (n, one, few, many) => `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
 const setTitle = t => (document.title = t ? `${t} – Faktury` : 'Faktury');
 
@@ -119,7 +120,8 @@ const contactLabel = c => (c.ico ? `${c.name} (IČO ${c.ico})` : c.name);
 const pickCustomer = c => Object.fromEntries(CUSTOMER_FIELDS.map(k => [k, c[k] || '']));
 const sameData = (a, b, keys) => keys.every(k => String(a?.[k] ?? '') === String(b?.[k] ?? ''));
 const addressLines = p => [p.street, [p.zip, p.city].filter(Boolean).join(' '), p.country].filter(Boolean);
-const pdfUrl = inv => `/archiv/${inv.pdf_file.split('/').map(encodeURIComponent).join('/')}?v=${encodeURIComponent(inv.updated_at || '')}`;
+const archivUrl = (file, version) => `/archiv/${file.split('/').map(encodeURIComponent).join('/')}?v=${encodeURIComponent(version || '')}`;
+const pdfUrl = inv => archivUrl(inv.pdf_file, inv.updated_at);
 const pdfFileName = inv => `Faktura-${inv.number.replace(/[^\w.-]+/g, '-')}.pdf`;
 const missingSettings = s => !s.name || !s.ico || !s.account;
 
@@ -223,24 +225,25 @@ function invoiceTable(rows, opts = {}) {
 // ---------- přehled ----------
 
 async function viewDashboard(params) {
-  const [invoices, settings] = await Promise.all([api('invoices'), api('settings')]);
+  const [invoices, incomes, settings] = await Promise.all([api('invoices'), api('incomes'), api('settings')]);
   return () => {
     setTitle('Přehled');
     const today = isoDate();
     const thisYear = today.slice(0, 4);
     const thisMonth = Number(today.slice(5, 7)) - 1;
-    const years = [...new Set([thisYear, ...invoices.map(i => i.issue_date.slice(0, 4))])].sort();
+    const years = [...new Set([thisYear, ...invoices.map(i => i.issue_date.slice(0, 4)), ...incomes.map(i => i.date.slice(0, 4))])].sort();
     const year = years.includes(params.get('rok')) ? params.get('rok') : thisYear;
     const isCurrent = year === thisYear;
 
     const active = invoices.filter(i => i.status !== 'cancelled');
     const inYear = active.filter(i => i.issue_date.startsWith(year));
+    const incomesInYear = incomes.filter(i => i.date.startsWith(year));
     const unpaid = active.filter(i => i.status === 'issued');
     const overdue = unpaid.filter(i => i.due_date < today);
     const byMonth = Array.from({ length: 12 }, (_, m) => inYear.filter(i => Number(i.issue_date.slice(5, 7)) === m + 1));
     const monthsSoFar = isCurrent ? thisMonth + 1 : 12;
 
-    if (!invoices.length) {
+    if (!invoices.length && !incomes.length) {
       app.innerHTML = `
         ${missingSettings(settings) ? '<div class="notice">Než vystavíš první fakturu, vyplň svoje údaje a číslo účtu v <a href="#/nastaveni">Nastavení</a>.</div>' : ''}
         <div class="page-head"><h1>Přehled</h1></div>
@@ -264,7 +267,7 @@ async function viewDashboard(params) {
 
     const yearRows = years.slice().reverse().map(y => {
       const list = active.filter(i => i.issue_date.startsWith(y));
-      return { y, count: list.length, total: sum(list), paid: sum(list.filter(i => i.status === 'paid')) };
+      return { y, count: list.length, total: sum(list), paid: sum(list.filter(i => i.status === 'paid')), other: sumAmount(incomes.filter(i => i.date.startsWith(y))) };
     });
 
     app.innerHTML = `
@@ -290,19 +293,34 @@ async function viewDashboard(params) {
           <div class="card-head"><h2>Odběratelé</h2><span class="muted">${year}</span></div>
           <div id="customers">${customers.length ? '' : '<p class="muted">V tomto roce zatím nic.</p>'}</div>
         </section>
-        ${socialCard({ year, isCurrent, active, unpaid, settings })}
+        ${socialCard({ year, isCurrent, active, unpaid, incomes: incomesInYear, settings })}
         <section class="card">
           <div class="card-head"><h2>Limit pro DPH</h2><span class="muted">${year}</span></div>
-          ${meter(sum(inYear), VAT_LIMIT)}
-          <p class="hint">Když obrat za kalendářní rok přesáhne 2&nbsp;000&nbsp;000&nbsp;Kč, musíš se registrovat k&nbsp;DPH.</p>
+          ${meter(sum(inYear) + sumAmount(incomesInYear), VAT_LIMIT)}
+          <p class="hint">Když obrat za kalendářní rok přesáhne 2&nbsp;000&nbsp;000&nbsp;Kč, musíš se registrovat k&nbsp;DPH.${incomesInYear.length ? ' Obrat zahrnuje i příjmy bez faktury.' : ''}</p>
         </section>
+        ${incomesInYear.length ? `
+          <section class="table-card wide">
+            <div class="card-head"><h2>Příjmy bez faktury</h2><a class="btn" href="#/prijem/novy">Přidat</a></div>
+            <div class="table-scroll"><table class="list">
+              <thead><tr><th>Přijato</th><th>Od koho</th><th class="hide-sm">Popis</th><th class="num">Částka</th></tr></thead>
+              <tbody>${incomesInYear.map(i => `
+                <tr data-href="#/prijem/${i.id}">
+                  <td class="nowrap">${Fmt.date(i.date)}</td>
+                  <td class="strong"><a href="#/prijem/${i.id}" style="color:inherit">${esc(i.payer)}</a></td>
+                  <td class="hide-sm muted">${esc(i.description)}</td>
+                  <td class="num">${Fmt.money(i.amount)}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table></div>
+          </section>` : ''}
         <section class="table-card wide">
           <table class="list">
-            <thead><tr><th>Rok</th><th class="num">Faktur</th><th class="num">Vyfakturováno</th><th class="num">Zaplaceno</th></tr></thead>
+            <thead><tr><th>Rok</th><th class="num">Faktur</th><th class="num">Vyfakturováno</th><th class="num">Zaplaceno</th>${incomes.length ? '<th class="num">Bez faktury</th>' : ''}</tr></thead>
             <tbody>${yearRows.map(r => `
               <tr data-href="#/prehled?rok=${r.y}" class="${r.y === year ? 'selected' : ''}">
                 <td class="strong"><a href="#/prehled?rok=${r.y}" style="color:inherit">${r.y}</a></td>
-                <td class="num">${r.count}</td><td class="num">${Fmt.money0(r.total)}</td><td class="num">${Fmt.money0(r.paid)}</td>
+                <td class="num">${r.count}</td><td class="num">${Fmt.money0(r.total)}</td><td class="num">${Fmt.money0(r.paid)}</td>${incomes.length ? `<td class="num">${Fmt.money0(r.other)}</td>` : ''}
               </tr>`).join('')}
             </tbody>
           </table>
@@ -319,7 +337,7 @@ async function viewDashboard(params) {
 }
 
 /** Karta „Sociální pojištění“: kolik ještě můžu přijmout, aby zisk nedosáhl rozhodné částky. */
-function socialCard({ year, isCurrent, active, unpaid, settings }) {
+function socialCard({ year, isCurrent, active, unpaid, incomes, settings }) {
   if (!settings.side_activity) return '';
   const head = `<div class="card-head"><h2>Sociální pojištění</h2><span class="muted">${year} · vedlejší činnost</span></div>`;
   const limit = SOCIAL_LIMITS[year];
@@ -329,8 +347,8 @@ function socialCard({ year, isCurrent, active, unpaid, settings }) {
   const rate = Number(settings.expense_rate) || 0;
   // Nejvyšší příjmy, při kterých zisk zůstane pod rozhodnou částkou (zisk = příjmy − paušál).
   const maxIncome = Math.floor((limit - 1) / (1 - rate / 100));
-  // Počítá se podle data zaplacení – příjem patří do roku, kdy peníze přišly.
-  const received = sum(active.filter(i => i.status === 'paid' && (i.paid_date || '').startsWith(year)));
+  // Počítá se podle data zaplacení – příjem patří do roku, kdy peníze přišly. Příjmy bez faktury taky.
+  const received = sum(active.filter(i => i.status === 'paid' && (i.paid_date || '').startsWith(year))) + sumAmount(incomes);
   const pending = isCurrent ? sum(unpaid) : 0;
   const over = received > maxIncome;
   const left = maxIncome - received;
@@ -355,7 +373,7 @@ function socialCard({ year, isCurrent, active, unpaid, settings }) {
       ${warn}
       <p class="hint">Sociální pojištění neplatíš, dokud zisk za rok nedosáhne ${Fmt.money0(limit)} (rozhodná částka ${year}).
         ${rate ? `Při paušálu ${rate} % to je nejvýš ${Fmt.money0(maxIncome)} přijatých plateb.` : 'Počítá se bez výdajů, takže skutečná rezerva je větší o tvoje výdaje.'}
-        Počítají se platby podle data zaplacení. Paušál změníš v&nbsp;<a href="#/nastaveni">Nastavení</a>.</p>
+        Počítají se platby podle data zaplacení${incomes.length ? ` včetně příjmů bez faktury (${Fmt.money0(sumAmount(incomes))})` : ''}. Paušál změníš v&nbsp;<a href="#/nastaveni">Nastavení</a>.</p>
     </section>`;
 }
 
@@ -379,7 +397,10 @@ async function viewInvoices(params) {
     app.innerHTML = `
       <div class="page-head">
         <h1>Faktury</h1>
-        <a class="btn primary" href="#/faktura/nova">Nová faktura</a>
+        <div class="actions">
+          <a class="btn" href="#/prijem/novy">Příjem bez faktury</a>
+          <a class="btn primary" href="#/faktura/nova">Nová faktura</a>
+        </div>
       </div>
       <div class="toolbar">
         <div class="segmented" role="group" aria-label="Stav">${STATUS_FILTERS.map(([k, label]) => `<button type="button" data-stav="${k}" aria-pressed="false">${label}</button>`).join('')}</div>
@@ -820,6 +841,79 @@ function renderInvoiceForm(inv, id, settings, contacts) {
   drawItems();
 }
 
+// ---------- příjem bez faktury ----------
+
+async function viewIncomeForm(params, id) {
+  const [income, incomes, contacts] = await Promise.all([id ? api('incomes/' + id) : null, api('incomes'), api('contacts')]);
+  const payers = [...new Set([...incomes.map(i => i.payer), ...contacts.map(c => c.name)])].sort((a, b) => a.localeCompare(b, 'cs'));
+  return () => {
+    const inc = income || { date: isoDate(), amount: '', payer: '', description: '', doc_file: null };
+    setTitle(id ? `Příjem od ${inc.payer}` : 'Příjem bez faktury');
+    let dirty = false;
+    leaveGuard = () => dirty;
+    const back = `#/prehled?rok=${inc.date.slice(0, 4)}`;
+    const docUrl = inc.doc_file ? archivUrl(inc.doc_file, inc.updated_at) : null;
+    app.innerHTML = `
+      <a class="back" href="${back}">‹ Přehled</a>
+      <div class="page-head"><h1>${id ? `Příjem od ${esc(inc.payer)}` : 'Příjem bez faktury'}</h1></div>
+      <form id="income-form" class="card" autocomplete="off" novalidate>
+        <p class="muted" style="margin:0 0 18px">Peníze, které ti přišly, aniž bys vystavil fakturu (vyúčtování, honorář…).
+          Započítají se do limitu pro sociální pojištění i pro DPH podle data přijetí.</p>
+        <div class="grid">
+          ${field('Datum přijetí', 'name="date" required', inc.date, { cls: 'c2', type: 'date' })}
+          ${field('Částka (Kč)', 'name="amount" required class="num" inputmode="decimal" placeholder="0"', decimalInput(inc.amount), { cls: 'c2' })}
+          ${field('Od koho', 'name="payer" required list="payers"', inc.payer, { cls: 'c2' })}
+          ${field('Popis (nepovinné)', 'name="description" placeholder="Např. pořádání akce"', inc.description, { cls: 'c6' })}
+          <div class="c6">
+            <label>Doklad (nepovinné)<input type="file" name="doc" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"></label>
+            <span class="hint">${docUrl
+              ? `Uložený doklad: <a href="${docUrl}" target="_blank" rel="noopener">${esc(inc.doc_file.split('/').pop())}</a>. Nový soubor ho nahradí.`
+              : 'Vyúčtování, výpis z účtu apod. – PDF, PNG nebo JPG. Uloží se do archivu vedle faktur.'}</span>
+          </div>
+        </div>
+        <datalist id="payers">${payers.map(p => `<option value="${esc(p)}"></option>`).join('')}</datalist>
+        <div class="form-actions" style="margin-top:20px">
+          ${id ? '<button type="button" class="btn ghost danger" id="delete" style="margin-right:auto">Smazat…</button>' : ''}
+          <a class="btn" href="${back}">Zrušit</a>
+          <button type="submit" class="btn primary">Uložit</button>
+        </div>
+      </form>
+      ${docUrl ? `<iframe class="pdf-frame" src="${docUrl}" title="Doklad k příjmu"></iframe>` : ''}`;
+
+    const form = $('#income-form');
+    form.addEventListener('input', () => (dirty = true));
+    form.onsubmit = e => {
+      e.preventDefault();
+      attempt(async () => {
+        const els = form.elements;
+        const file = els.doc.files[0];
+        if (file && file.size > 25 * 1024 * 1024) throw new Error('Doklad je moc velký (nejvýš 25 MB).');
+        const body = { date: els.date.value, amount: els.amount.value, payer: els.payer.value, description: els.description.value };
+        const saved = await api(id ? `incomes/${id}` : 'incomes', { method: id ? 'PUT' : 'POST', body });
+        leaveGuard = null;
+        if (file) {
+          try {
+            await api(`incomes/${saved.id}/doc`, { method: 'PUT', body: file });
+          } catch (err) {
+            if (!id) location.hash = `#/prijem/${saved.id}`; // ať se příjem neuloží podruhé
+            throw new Error(`Příjem je uložený, ale doklad se nenahrál: ${err.message}`);
+          }
+        }
+        toast(id ? 'Příjem uložen' : 'Příjem přidán');
+        location.hash = `#/prehled?rok=${saved.date.slice(0, 4)}`;
+      }, e.submitter);
+    };
+    const del = $('#delete');
+    if (del) del.onclick = () => attempt(async () => {
+      if (!confirm(`Smazat příjem ${Fmt.money(inc.amount)} od ${inc.payer}?${inc.doc_file ? '\n\nDoklad se přesune do složky data/smazane.' : ''}`)) return;
+      await api('incomes/' + id, { method: 'DELETE' });
+      leaveGuard = null;
+      toast('Příjem smazán');
+      location.hash = back;
+    }, del);
+  };
+}
+
 // ---------- kontakty ----------
 
 async function viewContacts(params) {
@@ -1063,6 +1157,8 @@ const routes = [
   [/^\/faktura\/nova$/, p => viewInvoiceForm(p, null)],
   [/^\/faktura\/(\d+)$/, (p, id) => viewInvoice(p, Number(id))],
   [/^\/faktura\/(\d+)\/upravit$/, (p, id) => viewInvoiceForm(p, Number(id))],
+  [/^\/prijem\/novy$/, p => viewIncomeForm(p, null)],
+  [/^\/prijem\/(\d+)$/, (p, id) => viewIncomeForm(p, Number(id))],
   [/^\/kontakty$/, viewContacts],
   [/^\/kontakt\/novy$/, p => viewContactForm(p, null)],
   [/^\/kontakt\/(\d+)$/, (p, id) => viewContactForm(p, Number(id))],
