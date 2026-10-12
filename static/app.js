@@ -8,10 +8,26 @@ const app = $('#app');
 const UNITS = ['ks', 'hod', 'den', 'měs.', 'km', 'm²', 'paušál'];
 const CUSTOMER_FIELDS = ['name', 'ico', 'dic', 'street', 'city', 'zip', 'country', 'email'];
 const SUPPLIER_FIELDS = ['name', 'street', 'city', 'zip', 'ico', 'registration', 'account', 'iban', 'email', 'phone', 'web', 'vat_note', 'footer_note'];
-const VAT_LIMIT = 2000000; // obrat za kalendářní rok, nad který se neplátce musí registrovat k DPH
+// Obrat za kalendářní rok, nad který se neplátce musí registrovat k DPH (od 2025): nad 2 mil. Kč
+// je plátcem od 1. 1. dalšího roku, nad 2 536 500 Kč (100 000 €) hned ode dne po překročení.
+const VAT_LIMIT = 2000000;
+const VAT_LIMIT_NOW = 2536500;
 // Rozhodná částka pro vedlejší SVČ (ČSSZ): když zisk za rok dosáhne této částky, platí se sociální pojištění.
 // Každý rok doplnit novou hodnotu (zveřejňuje se na podzim předchozího roku).
 const SOCIAL_LIMITS = { 2025: 111736, 2026: 117521 };
+// Daň z příjmů: 15 % ze zisku zaokrouhleného dolů na stovky, minus sleva na poplatníka.
+// Sazba 23 % platí až nad 36násobkem průměrné mzdy (2026: 1 762 812 Kč), s tou se nepočítá.
+// Od roku 2027 se má vrátit sleva na studenta (4 020 Kč) – až bude zákon platit, doplnit ji podle roku.
+const TAX_RATE = 15;
+const TAX_CREDIT = 30840;
+const EXPENSE_CAPS = { 80: 1600000, 60: 1200000, 40: 800000 }; // strop paušálních výdajů za rok
+// Zdravotní pojištění OSVČ: 13,5 % z poloviny zisku. Při vedlejší činnosti (student, zaměstnanec)
+// se od roku 2026 zálohy neplatí a celé pojistné se doplácí po podání přehledu.
+const HEALTH_RATE = 13.5;
+// Sociální pojištění OSVČ: 29,2 % z 55 % zisku. U vedlejší činnosti jen když zisk dosáhne rozhodné částky.
+// 55 % z rozhodné částky odpovídá minimálnímu vyměřovacímu základu, takže minimum se prakticky neuplatní.
+const SOCIAL_RATE = 29.2;
+const SOCIAL_BASE = 55;
 const EXPENSE_RATES = [
   [80, '80 % – řemeslné živnosti'],
   [60, '60 % – ostatní živnosti'],
@@ -103,6 +119,9 @@ const decimalInput = v => (v === '' || v == null ? '' : String(v).replace('.', '
 const byName = (a, b) => a.name.localeCompare(b.name, 'cs', { sensitivity: 'base' });
 const sum = list => list.reduce((s, i) => s + i.total, 0);
 const sumAmount = list => list.reduce((s, i) => s + i.amount, 0); // příjmy bez faktury
+// Příjem patří do roku, kdy peníze přišly: zaplacené faktury podle data zaplacení + příjmy bez faktury za rok.
+const receivedIn = (year, active, incomes) => sum(active.filter(i => i.status === 'paid' && (i.paid_date || '').startsWith(year))) + sumAmount(incomes);
+const ceilKc = n => Math.ceil(n - 1e-6); // daň a pojistné se zaokrouhlují na koruny nahoru
 const plural = (n, one, few, many) => `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
 const setTitle = t => (document.title = t ? `${t} – Faktury` : 'Faktury');
 
@@ -270,12 +289,17 @@ async function viewDashboard(params) {
       return { y, count: list.length, total: sum(list), paid: sum(list.filter(i => i.status === 'paid')), other: sumAmount(incomes.filter(i => i.date.startsWith(y))) };
     });
 
+    const turnover = sum(inYear) + sumAmount(incomesInYear);
+    const vatLevel = limitLevel(turnover, VAT_LIMIT);
+    const alerts = isCurrent ? yearAlerts({ year, turnover, received: receivedIn(year, active, incomesInYear), pending: sum(unpaid), settings }) : [];
+
     app.innerHTML = `
       ${missingSettings(settings) ? '<div class="notice">Doplň svoje údaje a číslo účtu v <a href="#/nastaveni">Nastavení</a>.</div>' : ''}
       <div class="page-head">
         <h1>Přehled</h1>
         <nav class="segmented" aria-label="Rok">${years.map(y => `<a href="#/prehled?rok=${y}" class="${y === year ? 'on' : ''}" ${y === year ? 'aria-current="page"' : ''}>${y}</a>`).join('')}</nav>
       </div>
+      ${alerts.length ? `<div class="alerts">${alertList(alerts)}</div>` : ''}
       <div class="kpis">
         <div class="kpi"><div class="k">Vyfakturováno ${isCurrent ? 'letos' : `v roce ${year}`}</div><div class="v">${Fmt.money0(sum(inYear))}</div><div class="d">${plural(inYear.length, 'faktura', 'faktury', 'faktur')}</div></div>
         ${isCurrent
@@ -293,11 +317,14 @@ async function viewDashboard(params) {
           <div class="card-head"><h2>Odběratelé</h2><span class="muted">${year}</span></div>
           <div id="customers">${customers.length ? '' : '<p class="muted">V tomto roce zatím nic.</p>'}</div>
         </section>
-        ${socialCard({ year, isCurrent, active, unpaid, incomes: incomesInYear, settings })}
+        ${duesCard({ year, isCurrent, active, unpaid, incomes: incomesInYear, settings })}
         <section class="card">
           <div class="card-head"><h2>Limit pro DPH</h2><span class="muted">${year}</span></div>
-          ${meter(sum(inYear) + sumAmount(incomesInYear), VAT_LIMIT)}
-          <p class="hint">Když obrat za kalendářní rok přesáhne 2&nbsp;000&nbsp;000&nbsp;Kč, musíš se registrovat k&nbsp;DPH.${incomesInYear.length ? ' Obrat zahrnuje i příjmy bez faktury.' : ''}</p>
+          ${meter(turnover, VAT_LIMIT)}
+          <p class="limit-note ${vatLevel}">${flag(vatLevel)} ${turnover > VAT_LIMIT
+            ? `Limit je překročený o ${Fmt.money0(turnover - VAT_LIMIT)}`
+            : `Do limitu zbývá ${vatLevel ? 'už jen ' : ''}${Fmt.money0(VAT_LIMIT - turnover)}`}</p>
+          <p class="hint">Když obrat za kalendářní rok přesáhne 2&nbsp;000&nbsp;000&nbsp;Kč, budeš od 1.&nbsp;1. dalšího roku plátce DPH, nad 2&nbsp;536&nbsp;500&nbsp;Kč hned ode dne po překročení.${incomesInYear.length ? ' Obrat zahrnuje i příjmy bez faktury.' : ''}</p>
         </section>
         ${incomesInYear.length ? `
           <section class="table-card wide">
@@ -336,44 +363,174 @@ async function viewDashboard(params) {
   };
 }
 
-/** Karta „Sociální pojištění“: kolik ještě můžu přijmout, aby zisk nedosáhl rozhodné částky. */
-function socialCard({ year, isCurrent, active, unpaid, incomes, settings }) {
-  if (!settings.side_activity) return '';
-  const head = `<div class="card-head"><h2>Sociální pojištění</h2><span class="muted">${year} · vedlejší činnost</span></div>`;
-  const limit = SOCIAL_LIMITS[year];
-  if (!limit) {
-    return `<section class="card">${head}<p class="muted" style="margin:0">Rozhodnou částku pro rok ${year} zatím appka nezná.</p></section>`;
-  }
-  const rate = Number(settings.expense_rate) || 0;
-  // Nejvyšší příjmy, při kterých zisk zůstane pod rozhodnou částkou (zisk = příjmy − paušál).
-  const maxIncome = Math.floor((limit - 1) / (1 - rate / 100));
-  // Počítá se podle data zaplacení – příjem patří do roku, kdy peníze přišly. Příjmy bez faktury taky.
-  const received = sum(active.filter(i => i.status === 'paid' && (i.paid_date || '').startsWith(year))) + sumAmount(incomes);
-  const pending = isCurrent ? sum(unpaid) : 0;
-  const over = received > maxIncome;
-  const left = maxIncome - received;
+// Nejvyšší příjmy, při kterých zisk (příjmy − paušál) zůstane pod rozhodnou částkou.
+const socialMaxIncome = (limit, rate) => Math.floor((limit - 1) / (1 - rate / 100));
+// Nejvyšší příjmy, při kterých sleva na poplatníka pokryje celou daň (zisk pod 205 700 Kč → základ 205 600 Kč).
+const taxFreeIncome = rate => Math.ceil((Math.floor(TAX_CREDIT / TAX_RATE) * 100 + 100) * 100 / (100 - rate)) - 1;
+const pctLabel = n => String(n).replace('.', ',') + ' %';
 
-  const big = over
-    ? `<div class="k">Limit je překročený o</div><div class="v bad">${Fmt.money0(-left)}</div>
-       <div class="d">Za rok ${year} budeš sociální pojištění platit.</div>`
-    : isCurrent
-      ? `<div class="k">Letos ještě můžeš přijmout</div><div class="v">${Fmt.money0(left)}</div>
-         <div class="d">a sociální pojištění za rok ${year} platit nebudeš.</div>`
-      : `<div class="k">Pod limitem o</div><div class="v">${Fmt.money0(left)}</div>
-         <div class="d">Za rok ${year} se sociální pojištění neplatí.</div>`;
-  const legend = `<span class="keys"><span><i class="sw"></i>Přijato ${Fmt.money0(received)}</span>${pending > 0 && !over ? `<span><i class="sw pending"></i>Čeká ${Fmt.money0(pending)}</span>` : ''}</span>`;
-  const warn = !over && received + pending > maxIncome
-    ? `<p class="hint bad">Když ti letos přijdou i čekající platby, limit překročíš.</p>` : '';
+/** Varovné hlášky: [{ level: 'warn' | 'bad', label, text }] → seznam barevných upozornění. */
+const alertList = alerts => alerts
+  .sort((a, b) => (b.level === 'bad') - (a.level === 'bad'))
+  .map(a => `<div class="notice ${a.level}"><span aria-hidden="true">${flag(a.level)}</span><span><b>${a.label}:</b> ${a.text}</span></div>`).join('');
+
+/**
+ * Varování na přehledu za letošek: obrat vůči limitu pro DPH (podle data vystavení), přijaté platby
+ * vůči limitu pro sociální pojištění a vůči příjmům, které ještě pokryje sleva na dani.
+ * pending = nezaplacené faktury, které můžou letos ještě přijít.
+ */
+function yearAlerts({ year, turnover, received, pending, settings }) {
+  const alerts = [];
+  const add = (level, label, text) => level && alerts.push({ level, label, text });
+  const money = Fmt.money0;
+  const rate = Number(settings.expense_rate) || 0;
+
+  if (turnover > VAT_LIMIT_NOW) {
+    add('bad', 'DPH', `obrat ${money(turnover)} je přes ${money(VAT_LIMIT_NOW)}, takže plátcem jsi už ode dne po překročení. Přihlášku k registraci je potřeba podat do 10 pracovních dnů.`);
+  } else if (turnover > VAT_LIMIT) {
+    add('bad', 'DPH', `obrat ${money(turnover)} je přes ${money(VAT_LIMIT)}, takže od 1. 1. ${Number(year) + 1} budeš plátce. Přihlášku k registraci je potřeba podat do 10 pracovních dnů. Nad ${money(VAT_LIMIT_NOW)} vzniká plátcovství hned.`);
+  } else {
+    add(limitLevel(turnover, VAT_LIMIT), 'DPH', `do limitu obratu ${money(VAT_LIMIT)} zbývá ${money(VAT_LIMIT - turnover)}.`);
+  }
+
+  const limit = settings.side_activity && SOCIAL_LIMITS[year];
+  if (limit) {
+    const max = socialMaxIncome(limit, rate);
+    const left = max - received;
+    const cliff = `Překročení by znamenalo sociální pojištění aspoň ${money(yearlyDues(max + 1, rate, limit).social)}.`;
+    if (left < 0) {
+      add('bad', 'Sociální pojištění', `limit je překročený o ${money(-left)}, za rok ${year} zatím vychází na ${money(yearlyDues(received, rate, limit).social)}.`);
+    } else if (received + pending > max) {
+      add('bad', 'Sociální pojištění', `čekající platby (${money(pending)}) by limit přetáhly, zbývá jen ${money(left)}. ${cliff} Platba přijatá až v lednu se počítá do dalšího roku.`);
+    } else {
+      const level = limitLevel(received, max);
+      add(level, 'Sociální pojištění', `${level === 'bad' ? 'do limitu zbývá už jen' : 'blížíš se limitu, letos můžeš přijmout ještě'} ${money(left)}. ${cliff}`);
+    }
+  }
+
+  // Daň roste plynule (žádný skok jako u pojištění), proto jen oranžově.
+  const free = taxFreeIncome(rate);
+  if (received <= free && limitLevel(received, free, pending)) {
+    add('warn', 'Daň z příjmů', `od příjmů ${money(free + 1)} už sleva na poplatníka nepokryje celou daň, zbývá ${money(free - received)}.`);
+  }
+  return alerts;
+}
+
+/**
+ * Varování k částce ve formuláři: když by faktura nebo příjem přetáhly limit pro DPH (obrat za rok
+ * vystavení) nebo pro sociální pojištění (příjmy za rok zaplacení). invoices a incomes jsou ostatní
+ * doklady, bez toho právě upravovaného.
+ */
+function amountAlerts({ amount, vatYear, paidYear, invoices, incomes, settings }) {
+  const alerts = [];
+  if (!(amount > 0) || !/^\d{4}$/.test(vatYear) || !/^\d{4}$/.test(paidYear)) return alerts;
+  const add = (level, label, text) => level && alerts.push({ level, label, text });
+  const money = Fmt.money0;
+  const active = invoices.filter(i => i.status !== 'cancelled');
+  const incomesIn = y => incomes.filter(i => i.date.startsWith(y));
+
+  const before = sum(active.filter(i => i.issue_date.startsWith(vatYear))) + sumAmount(incomesIn(vatYear));
+  const after = before + amount;
+  if (before <= VAT_LIMIT_NOW && after > VAT_LIMIT_NOW) {
+    add('bad', 'DPH', `obrat za rok ${vatYear} tím přesáhne ${money(VAT_LIMIT_NOW)}, takže plátcem DPH budeš hned ode dne po překročení.`);
+  } else if (before <= VAT_LIMIT && after > VAT_LIMIT) {
+    add('bad', 'DPH', `obrat za rok ${vatYear} tím přesáhne ${money(VAT_LIMIT)}, takže od 1. 1. ${Number(vatYear) + 1} budeš plátce DPH.`);
+  } else if (after <= VAT_LIMIT) {
+    add(limitLevel(after, VAT_LIMIT), 'DPH', `do limitu obratu za rok ${vatYear} pak zbude ${money(VAT_LIMIT - after)}.`);
+  }
+
+  const limit = settings.side_activity && SOCIAL_LIMITS[paidYear];
+  if (limit) {
+    const rate = Number(settings.expense_rate) || 0;
+    const max = socialMaxIncome(limit, rate);
+    const received = receivedIn(paidYear, active, incomesIn(paidYear)) + amount;
+    const pending = paidYear === isoDate().slice(0, 4) ? sum(active.filter(i => i.status === 'issued')) : 0;
+    if (received > max && received - amount <= max) {
+      add('bad', 'Sociální pojištění', `příjmy za rok ${paidYear} tím přesáhnou limit o ${money(received - max)} a pojištění vyjde na ${money(yearlyDues(received, rate, limit).social)}. Platba přijatá až v roce ${Number(paidYear) + 1} se počítá do dalšího roku.`);
+    } else if (received <= max && received + pending > max) {
+      add('bad', 'Sociální pojištění', `spolu s čekajícími platbami (${money(pending)}) by příjmy za rok ${paidYear} limit přesáhly.`);
+    } else if (received <= max) {
+      add(limitLevel(received, max), 'Sociální pojištění', `do limitu za rok ${paidYear} pak zbude ${money(max - received)}.`);
+    }
+  }
+  return alerts;
+}
+
+/** Daň a pojistné za rok z přijatých plateb (paušální výdaje, žádné jiné příjmy). limit = rozhodná částka. */
+function yearlyDues(received, rate, limit) {
+  const expenses = Math.min(received * rate / 100, EXPENSE_CAPS[rate] ?? Infinity);
+  const profit = Math.max(0, round2(received - expenses));
+  const base = Math.floor(profit / 100) * 100;
+  const over = Boolean(limit) && received > socialMaxIncome(limit, rate);
+  return {
+    profit, base, over,
+    tax: Math.max(0, ceilKc(base * TAX_RATE / 100) - TAX_CREDIT),
+    health: ceilKc(profit / 2 * HEALTH_RATE / 100),
+    social: over ? ceilKc(ceilKc(profit * SOCIAL_BASE / 100) * SOCIAL_RATE / 100) : 0,
+  };
+}
+
+/**
+ * Karta „Daň a pojištění“: kolik se za rok zaplatí v dalším roce. U vedlejší činnosti i zdravotní
+ * a sociální pojištění s měřákem, kolik ještě můžu přijmout, aby zisk nedosáhl rozhodné částky.
+ */
+function duesCard({ year, isCurrent, active, unpaid, incomes, settings }) {
+  const next = Number(year) + 1;
+  const side = settings.side_activity;
+  const rate = Number(settings.expense_rate) || 0;
+  const limit = side ? SOCIAL_LIMITS[year] : 0;
+  const received = receivedIn(year, active, incomes);
+  const pending = isCurrent ? sum(unpaid) : 0;
+  const total = d => d.tax + (side ? d.health + d.social : 0);
+  const now = yearlyDues(received, rate, limit);
+  const later = yearlyDues(received + pending, rate, limit);
+  const crosses = later.over && !now.over;
+  const freeIncome = taxFreeIncome(rate);
+  // Daň nemá skok jako pojištění, takže se blížící hranice ukazuje nejvýš oranžově.
+  const taxLevel = !now.tax && limitLevel(received, freeIncome, pending) ? 'warn' : '';
+
+  // [popis, částka, poznámka, měřák, úroveň varování]
+  const rows = [['Daň z příjmů', Fmt.money0(now.tax), now.tax
+    ? `${pctLabel(TAX_RATE)} ze základu ${Fmt.money0(now.base)} minus sleva na poplatníka ${Fmt.money0(TAX_CREDIT)}`
+    : `${flag(taxLevel)} sleva na poplatníka ji pokryje do ${rate ? 'příjmů' : 'zisku'} ${Fmt.money0(freeIncome)}`, '', taxLevel]];
+  let socialHint = '';
+  if (side) {
+    rows.push(['Zdravotní pojištění', Fmt.money0(now.health), `${pctLabel(HEALTH_RATE)} z poloviny zisku`]);
+    if (!limit) {
+      rows.push(['Sociální pojištění', '–', `Rozhodnou částku pro rok ${year} appka zatím nezná.`]);
+    } else {
+      const maxIncome = socialMaxIncome(limit, rate);
+      const left = maxIncome - received;
+      const level = now.over ? 'over' : limitLevel(received, maxIncome, pending);
+      const legend = `<span class="keys"><span><i class="sw"></i>Přijato ${Fmt.money0(received)}</span>${pending > 0 && !now.over ? `<span><i class="sw pending${crosses ? ' over' : ''}"></i>Čeká ${Fmt.money0(pending)}</span>` : ''}</span>`;
+      rows.push(['Sociální pojištění', Fmt.money0(now.social),
+        now.over ? `${flag('bad')} limit překročený o ${Fmt.money0(-left)} · ${pctLabel(SOCIAL_RATE)} z ${SOCIAL_BASE} % zisku`
+          : isCurrent ? `${flag(level)} letos ještě můžeš přijmout ${level ? 'jen ' : ''}${Fmt.money0(left)} a platit ho nebudeš`
+            : `${flag(level)} pod limitem o ${Fmt.money0(left)}`,
+        meter(received, maxIncome, { pending, label: 'Přijato', legend }), level]);
+      socialHint = now.over
+        ? 'Po překročení limitu se od podání přehledu ČSSZ platí i měsíční zálohy na sociální pojištění.'
+        : `Sociální pojištění se platí, až když zisk za rok dosáhne ${Fmt.money0(limit)} (rozhodná částka ${year})${rate ? `, při paušálu ${rate} % to je víc než ${Fmt.money0(maxIncome)} přijatých plateb` : ''}.`;
+    }
+  }
 
   return `
-    <section class="card social">
-      ${head}
-      <div class="kpi-inline">${big}</div>
-      ${meter(received, maxIncome, { pending, label: 'Přijato', legend })}
-      ${warn}
-      <p class="hint">Sociální pojištění neplatíš, dokud zisk za rok nedosáhne ${Fmt.money0(limit)} (rozhodná částka ${year}).
-        ${rate ? `Při paušálu ${rate} % to je nejvýš ${Fmt.money0(maxIncome)} přijatých plateb.` : 'Počítá se bez výdajů, takže skutečná rezerva je větší o tvoje výdaje.'}
-        Počítají se platby podle data zaplacení${incomes.length ? ` včetně příjmů bez faktury (${Fmt.money0(sumAmount(incomes))})` : ''}. Paušál změníš v&nbsp;<a href="#/nastaveni">Nastavení</a>.</p>
+    <section class="card">
+      <div class="card-head"><h2>${side ? 'Daň a pojištění' : 'Daň z příjmů'}</h2><span class="muted">za rok ${year} · platí se v roce ${next}</span></div>
+      <div class="kpi-inline">
+        <div class="k">${isCurrent ? `V roce ${next} zaplatíš` : `Za rok ${year} celkem`}</div>
+        <div class="v">${Fmt.money0(total(now))}</div>
+        <div class="d">${isCurrent ? 'podle dosud přijatých plateb, ' : ''}ze zisku ${Fmt.money0(now.profit)}</div>
+      </div>
+      <dl class="dues-list">${rows.map(([label, value, note, extra, level]) => `
+        <div class="${level || ''}"><dt>${label}<span>${note}</span></dt><dd>${value}</dd>${extra ? `<dd class="extra">${extra}</dd>` : ''}</div>`).join('')}
+      </dl>
+      ${total(later) > total(now) ? `<p class="hint${crosses ? ' bad' : ''}">${crosses ? `${flag('bad')} ` : ''}Když ti letos přijdou i čekající platby (${Fmt.money0(pending)}), bude to ${Fmt.money0(total(later))}${crosses ? ', protože překročíš limit pro sociální pojištění' : ''}.</p>` : ''}
+      <p class="hint">${socialHint}
+        Daň se platí v termínu daňového přiznání${side ? ', pojistné do 8 dnů po podání přehledu' : ''}.
+        ${side && Number(year) >= 2026 ? 'Zálohy na zdravotní se při studiu nebo zaměstnání od roku 2026 neplatí.' : ''}</p>
+      <p class="hint">Počítají se platby podle data zaplacení${incomes.length ? ` včetně příjmů bez faktury (${Fmt.money0(sumAmount(incomes))})` : ''} a jen příjmy z podnikání, jiné příjmy (třeba brigáda) daň změní.
+        ${rate ? `Paušál ${rate} % změníš` : 'Počítá se bez výdajů, takže skutečné částky budou nižší. Paušál nastavíš'} v&nbsp;<a href="#/nastaveni">Nastavení</a>.</p>
     </section>`;
 }
 
@@ -589,7 +746,7 @@ async function viewInvoice(params, id) {
 // ---------- faktura: formulář ----------
 
 async function viewInvoiceForm(params, id) {
-  const [settings, contacts] = await Promise.all([api('settings'), api('contacts')]);
+  const [settings, contacts, invoices, incomes] = await Promise.all([api('settings'), api('contacts'), api('invoices'), api('incomes')]);
   contacts.sort(byName);
   let inv;
   if (id) {
@@ -610,10 +767,11 @@ async function viewInvoiceForm(params, id) {
       note: source?.note ?? '',
     };
   }
-  return () => renderInvoiceForm(inv, id, settings, contacts);
+  return () => renderInvoiceForm(inv, id, settings, contacts, { invoices: invoices.filter(i => i.id !== inv.id), incomes });
 }
 
-function renderInvoiceForm(inv, id, settings, contacts) {
+/** others = ostatní faktury a příjmy pro varování u limitů */
+function renderInvoiceForm(inv, id, settings, contacts, others) {
   setTitle(id ? `Upravit fakturu ${inv.number}` : 'Nová faktura');
   const state = {
     contactId: inv.contact_id,
@@ -660,6 +818,7 @@ function renderInvoiceForm(inv, id, settings, contacts) {
         <datalist id="units">${UNITS.map(u => `<option value="${u}"></option>`).join('')}</datalist>
         <button type="button" class="btn ghost" id="add-item" style="margin-top:8px">+ Přidat položku</button>
         <div class="total-row"><span class="muted">Celkem k úhradě</span><strong id="total"></strong></div>
+        <div class="alerts" id="limit-alerts"></div>
       </section>
       <section class="card">
         <label>Poznámka na faktuře (nepovinné)<textarea name="note" rows="2">${esc(inv.note)}</textarea></label>
@@ -750,6 +909,16 @@ function renderInvoiceForm(inv, id, settings, contacts) {
   });
   if (els.is_paid) els.is_paid.addEventListener('change', () => (els.paid_date.hidden = !els.is_paid.checked));
 
+  // Varování u limitů: DPH podle roku vystavení, sociální pojištění podle roku zaplacení (jinak splatnosti).
+  const updateLimits = amount => {
+    if (inv.status === 'cancelled') return;
+    const paidDate = els.is_paid?.checked ? els.paid_date.value : els.due_date.value;
+    $('#limit-alerts').innerHTML = alertList(amountAlerts({
+      amount, vatYear: els.issue_date.value.slice(0, 4), paidYear: paidDate.slice(0, 4), ...others, settings,
+    }));
+  };
+  form.addEventListener('change', () => updateTotals());
+
   // --- položky ---
   const tbody = $('#items');
   const updateTotals = () => {
@@ -761,6 +930,7 @@ function renderInvoiceForm(inv, id, settings, contacts) {
       $('[data-amount]', tr).textContent = Fmt.money(amount, false);
     });
     $('#total').textContent = Fmt.money(round2(total));
+    updateLimits(round2(total));
   };
   const drawItems = () => {
     tbody.innerHTML = state.items.map((it, i) => `
@@ -844,7 +1014,7 @@ function renderInvoiceForm(inv, id, settings, contacts) {
 // ---------- příjem bez faktury ----------
 
 async function viewIncomeForm(params, id) {
-  const [income, incomes, contacts] = await Promise.all([id ? api('incomes/' + id) : null, api('incomes'), api('contacts')]);
+  const [income, incomes, contacts, invoices, settings] = await Promise.all([id ? api('incomes/' + id) : null, api('incomes'), api('contacts'), api('invoices'), api('settings')]);
   const payers = [...new Set([...incomes.map(i => i.payer), ...contacts.map(c => c.name)])].sort((a, b) => a.localeCompare(b, 'cs'));
   return () => {
     const inc = income || { date: isoDate(), amount: '', payer: '', description: '', doc_file: null };
@@ -863,6 +1033,7 @@ async function viewIncomeForm(params, id) {
           ${field('Datum přijetí', 'name="date" required', inc.date, { cls: 'c2', type: 'date' })}
           ${field('Částka (Kč)', 'name="amount" required class="num" inputmode="decimal" placeholder="0"', decimalInput(inc.amount), { cls: 'c2' })}
           ${field('Od koho', 'name="payer" required list="payers"', inc.payer, { cls: 'c2' })}
+          <div class="c6 alerts" id="limit-alerts"></div>
           ${field('Popis (nepovinné)', 'name="description" placeholder="Např. pořádání akce"', inc.description, { cls: 'c6' })}
           <div class="c6">
             <label>Doklad (nepovinné)<input type="file" name="doc" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"></label>
@@ -882,6 +1053,15 @@ async function viewIncomeForm(params, id) {
 
     const form = $('#income-form');
     form.addEventListener('input', () => (dirty = true));
+    const otherIncomes = incomes.filter(i => i.id !== inc.id);
+    const updateLimits = () => {
+      const year = form.elements.date.value.slice(0, 4);
+      $('#limit-alerts').innerHTML = alertList(amountAlerts({
+        amount: parseNum(form.elements.amount.value), vatYear: year, paidYear: year, invoices, incomes: otherIncomes, settings,
+      }));
+    };
+    form.addEventListener('input', updateLimits);
+    updateLimits();
     form.onsubmit = e => {
       e.preventDefault();
       attempt(async () => {

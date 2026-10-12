@@ -86,19 +86,30 @@ function barList(el, rows) {
     </a>`).join('')}</div>`;
 }
 
+// Varování u limitu: oranžová od 75 %, červená od 90 % nebo když limit přetáhnou čekající platby.
+const LIMIT_WARN = 0.75;
+const LIMIT_BAD = 0.9;
+function limitLevel(value, limit, pending = 0) {
+  const ratio = value / limit;
+  return ratio >= LIMIT_BAD || value + pending > limit ? 'bad' : ratio >= LIMIT_WARN ? 'warn' : '';
+}
+const flag = level => ({ bad: '🔴', warn: '⚠️' })[level] ?? '✅';
+
 /**
  * Měřák vůči limitu. pending = světlejší úsek navíc (např. nezaplacené faktury),
  * legend = vlastní levá strana legendy.
  */
 function meter(value, limit, { pending = 0, label = 'Obrat', legend } = {}) {
   const ratio = value / limit;
-  const cls = ratio >= 1 ? 'bad' : ratio >= 0.75 ? 'warn' : '';
+  const cls = limitLevel(value, limit, pending);
   const w = r => Math.min(Math.max(r, 0), 1) * 100;
   const rest = w((value + pending) / limit) - w(ratio);
   const pct = String(+(ratio * 100).toFixed(1)).replace('.', ',');
+  // čekající platby, které by limit přetáhly, jsou šrafované červeně
+  const overflow = value <= limit && value + pending > limit;
   return `
     <div class="meter ${cls}" role="meter" aria-valuemin="0" aria-valuemax="${limit}" aria-valuenow="${Math.round(value)}"
-         aria-label="${label} ${Fmt.money0(value)} z limitu ${Fmt.money0(limit)}${pending > 0 ? `, dalších ${Fmt.money0(pending)} čeká na platbu` : ''}">
-      <div style="--w:${w(ratio)}%"></div>${rest > 0 ? `<div class="pending${value > 0 ? ' gap' : ''}" style="--w:${rest}%"></div>` : ''}</div>
+         aria-label="${label} ${Fmt.money0(value)} z limitu ${Fmt.money0(limit)}${pending > 0 ? `, dalších ${Fmt.money0(pending)} čeká na platbu${overflow ? ' a limit by přetáhlo' : ''}` : ''}">
+      <div style="--w:${w(ratio)}%"></div>${rest > 0 ? `<div class="pending${value > 0 ? ' gap' : ''}${overflow ? ' over' : ''}" style="--w:${rest}%"></div>` : ''}</div>
     <div class="meter-legend">${legend ?? `<span>${Fmt.money0(value)}</span>`}<span>${pct} % z ${Fmt.money0(limit)}</span></div>`;
 }

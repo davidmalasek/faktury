@@ -21,6 +21,7 @@
   --good-text: #1a7f37;
   --bad: #d03b3b;
   --bad-text: #c4291c;
+  --bad-bg: #fdeeed;
   --warn: #b25000;
   --warn-bg: #fff6e5;
   --topbar: rgba(245, 245, 247, 0.72);
@@ -59,6 +60,7 @@
     --good-text: #30d158;
     --bad: #d03b3b;
     --bad-text: #ff6961;
+  --bad-bg: #2e1715;
     --warn: #ffb340;
     --warn-bg: #2b2112;
     --topbar: rgba(22, 22, 23, 0.72);
@@ -209,6 +211,17 @@ select {
 .notice { padding: 12px 16px; border-radius: var(--radius-sm); background: var(--warn-bg); color: var(--warn); margin-bottom: 16px; font-size: 14px; }
 .notice a { font-weight: 600; color: inherit; text-decoration: underline; }
 .notice.info { background: var(--fill); color: var(--text); }
+.notice.bad { background: var(--bad-bg); color: var(--bad-text); }
+
+/* varování u limitů (DPH, sociální pojištění, daň) */
+.alerts { display: grid; gap: 8px; margin-bottom: 16px; }
+.alerts:empty { display: none; }
+.alerts .notice { display: flex; gap: 10px; margin: 0; }
+.card .alerts { margin: 14px 0 0; }
+.grid > .alerts { margin: 0; }
+.limit-note { font-size: 14px; font-weight: 500; margin: 10px 0 0; }
+.limit-note.warn { color: var(--warn); }
+.limit-note.bad { color: var(--bad-text); }
 
 /* ---------- tabulky ---------- */
 .table-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
@@ -327,6 +340,9 @@ a.kpi:hover { text-decoration: none; background: var(--card-hover); }
 .meter > .pending.gap { margin-left: 2px; }
 .meter.warn > div:first-child { background: #fab219; }
 .meter.bad > div:first-child { background: var(--bad); }
+.meter > .pending.over, .meter-legend .sw.pending.over { background: repeating-linear-gradient(-45deg, var(--bad) 0 2px, var(--bad-bg) 2px 5px); }
+.meter.warn + .meter-legend > :last-child { color: var(--warn); font-weight: 600; }
+.meter.bad + .meter-legend > :last-child { color: var(--bad-text); font-weight: 600; }
 .meter-legend { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .meter-legend .keys { display: flex; flex-wrap: wrap; gap: 2px 14px; }
 .meter-legend > :last-child { white-space: nowrap; }
@@ -338,6 +354,17 @@ a.kpi:hover { text-decoration: none; background: var(--card-hover); }
 .kpi-inline .v { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .kpi-inline .v.bad { color: var(--bad-text); }
 .kpi-inline .d { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* daň a pojištění */
+.dues-list { margin: 14px 0 0; }
+.dues-list > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 16px; padding: 10px 0; border-top: 1px solid var(--line); }
+.dues-list dt { font-size: 14px; font-weight: 500; }
+.dues-list dt span { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+.dues-list dd { margin: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dues-list dd.extra { grid-column: 1 / -1; font-size: inherit; font-weight: 400; white-space: normal; }
+.dues-list .meter { margin-bottom: 6px; }
+.dues-list > .warn dt span { color: var(--warn); }
+.dues-list > .bad dt span, .dues-list > .over dt span, .dues-list > .over > dd:not(.extra) { color: var(--bad-text); }
 
 /* ---------- detail faktury ---------- */
 .detail { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }

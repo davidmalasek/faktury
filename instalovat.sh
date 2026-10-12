@@ -32,8 +32,8 @@ cp macos/Faktury.icns "$TMP/Faktury.app/Contents/Resources/applet.icns"
 rm -f "$TMP/Faktury.app/Contents/Resources/Assets.car"
 PLIST="$TMP/Faktury.app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$PLIST" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier cz.malasek.faktury" "$PLIST" 2>/dev/null ||
-  /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string cz.malasek.faktury" "$PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier local.faktury" "$PLIST" 2>/dev/null ||
+  /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string local.faktury" "$PLIST"
 codesign --force --deep --sign - "$TMP/Faktury.app"
 
 rm -rf "$APP"
