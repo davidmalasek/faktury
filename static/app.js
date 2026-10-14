@@ -1292,6 +1292,10 @@ async function viewSettings() {
         <p class="hint" id="version-info" style="margin:0">Zjišťuji verzi…</p>
       </section>`;
     showVersion();
+    $$('[data-open]').forEach(b => (b.onclick = () => attempt(async () => {
+      await api(`peers/${b.dataset.open}/open`, { method: 'POST', body: {} });
+      toast('Otevírám… po prvním spuštění se aplikace propojí sama');
+    }, b)));
     $$('[data-install]').forEach(b => (b.onclick = () => attempt(async () => {
       toast('Stahuji a instaluji… může to minutu trvat');
       await api(`peers/${b.dataset.install}/install`, { method: 'POST', body: {} });
@@ -1378,7 +1382,7 @@ function peersCard(peers) {
           ${a.state === 'running' || a.state === 'ready'
             ? `<span class="state ok">✓ Propojeno${a.version ? ` · verze ${esc(a.version)}` : ''}</span><a class="btn" href="${esc(a.scheme || a.id)}://">Otevřít</a>`
             : a.state === 'installed'
-              ? `<span class="state muted">Propojí se po prvním otevření</span><a class="btn" href="${esc(a.id)}://">Otevřít</a>`
+              ? `<span class="state muted">Propojí se po prvním otevření</span><button type="button" class="btn" data-open="${esc(a.id)}">Otevřít</button>`
               : `<a class="btn ghost" href="${esc(a.web)}" target="_blank" rel="noopener">Co to je</a><button type="button" class="btn primary" data-install="${esc(a.id)}">Nainstalovat</button>`}
         </div>`).join('')}
       </div>

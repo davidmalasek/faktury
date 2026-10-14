@@ -185,6 +185,10 @@ class Handler(BaseHTTPRequestHandler):
             self.read_body()
             mejvos.install(rid)
             return self.send_json(mejvos.overview(db.APP_ID))
+        if res == "peers" and isinstance(rid, str) and sub == "open" and method == "POST":
+            self.read_body()
+            mejvos.open_app(rid)
+            return self.send_json({"ok": True})
 
         db.sync_peers()
 

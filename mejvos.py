@@ -334,6 +334,14 @@ def _open_and_wait(app_id, path, capability=None, wait=180):
     raise PeerError(f"Aplikace {CATALOG[app_id]['name']} se nespustila. Otevři ji a zkus to znovu.")
 
 
+def open_app(app_id):
+    """Otevře okno nainstalované aplikace (i starší verze, která ještě nezná odkazy <id>://)."""
+    path = app_path(app_id)
+    if path is None:
+        raise PeerError("Aplikace na tomhle Macu není.")
+    subprocess.run(["open", str(path)], check=False)
+
+
 def ensure(capability, exclude=None):
     """Najde aplikaci, která umí capability. Když je nainstalovaná, ale ještě nikdy neběžela, otevře ji.
     Když na Macu není, vrátí None (nabídni install())."""
