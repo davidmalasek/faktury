@@ -40,49 +40,45 @@ Faktury jsou v korunách a appka je česky.
 
 ## Požadavky
 
-- **Jen macOS 12 nebo novější.** Instalace, okno aplikace, záloha do iCloudu i tlačítko „Ukázat ve Finderu“ jsou psané pro Mac. Jádro je Python a webová stránka, ale na Linuxu ani Windows to vyzkoušené není.
-- **Vývojářské nástroje (Command Line Tools)**, ze kterých instalace sestaví aplikaci. Když chybí, nainstaluješ je příkazem `xcode-select --install`. Máš je i s Homebrew.
-- **Python 3.9 nebo novější.** Stačí ten ze systému (je součástí Command Line Tools), jde to i s Pythonem z Homebrew. Žádné další balíčky nejsou potřeba.
-- Internet jen pro načítání firem z ARES. Všechno ostatní funguje offline.
+- **Mac s macOS 12 nebo novějším** (Apple Silicon i Intel). Okno aplikace, záloha do iCloudu i tlačítko „Ukázat ve Finderu“ jsou psané pro Mac.
+- **Internet při prvním spuštění**: Faktury si stáhnou vlastní Python (asi 25 MB). Potom ho potřebují jen pro načítání firem z ARES a pro aktualizace.
 
-## Instalace a spuštění
+Nic dalšího instalovat nemusíš.
 
-Stáhni repozitář (`git clone` nebo Code → Download ZIP), dej složku tam, kde má natrvalo zůstat (třeba do Dokumentů), a spusť v ní:
+## Instalace
 
-```sh
-./instalovat.sh
-```
+1. Stáhni **[Faktury.zip](https://github.com/davidmalasek/faktury/releases/latest/download/Faktury.zip)**. Safari ZIP samo rozbalí, jinak na něj dvakrát klikni.
+2. Přetáhni **Faktury** do složky **Aplikace**.
+3. Otevři Faktury. Napoprvé je macOS nepustí a napíše, že aplikaci nemůže ověřit. Je to proto, že appka není placeně podepsaná u Applu.
+   Klikni na **Hotovo**, otevři **Nastavení systému → Soukromí a zabezpečení**, sjeď dolů a u hlášky o Fakturách klikni na **Přesto otevřít** a potvrď. Tohle je potřeba jen jednou.
 
-Skript sestaví aplikaci **Faktury.app** ve složce Aplikace. Pak ji spustíš přes Spotlight (⌘ mezerník → „Faktury“), Launchpad nebo Finder → Aplikace a můžeš si ji nechat v Docku.
-Otevře se ve vlastním okně, bez prohlížeče. PDF faktur a zálohu dat uložíš přes běžný dialog, velikost stránky změníš ⌘+ a ⌘−.
-
-Při otevření aplikace se na pozadí spustí server z této složky (`spustit.sh`). Běží dál i po zavření okna, takže další otevření je hned.
-Dokud běží, appka funguje i v prohlížeči na adrese http://localhost:8765.
-Když složku projektu přesuneš, spusť `./instalovat.sh` znovu. Stejně tak nahradíš starší Faktury.app, která otevírala prohlížeč.
-
-Při prvním spuštění se macOS zeptá, jestli smí Faktury přistupovat ke složce Dokumenty a k iCloud Drive. Klikni na **Povolit**.
+Při prvním otevření si Faktury chvíli připravují (stahují Python). Pak se macOS zeptá, jestli smí přistupovat k iCloud Drive kvůli záloze. Klikni na **Povolit**.
 Když omylem zakážeš: Nastavení systému → Soukromí a zabezpečení → Soubory a složky → Faktury.
 
+Faktury se otevřou ve vlastním okně. Najdeš je přes Spotlight (⌘ mezerník → „Faktury“) nebo v Launchpadu a můžeš si je nechat v Docku.
+PDF faktur a zálohu dat uložíš přes běžný dialog, velikost stránky změníš ⌘+ a ⌘−.
+
 Než vystavíš první fakturu, vyplň v **Nastavení** svoje údaje, číslo účtu a výdajový paušál.
+
+Server Faktur běží na pozadí i po zavření okna, takže další otevření je hned. Dokud běží, appka funguje i v prohlížeči na adrese http://localhost:8765.
 
 ## Aktualizace
 
 Faktury se při každém otevření podívají na GitHub, jestli nevyšla nová verze. Když ano, samy ji stáhnou a nainstalují. Trvá to pár vteřin a pak se stránka sama načte znovu.
-Před aktualizací se data zazálohují do `data/zalohy` a složku `data` aktualizace nikdy nepřepíše.
-Kterou verzi máš, uvidíš v **Nastavení** dole.
+Před aktualizací se data zazálohují a data aktualizace nikdy nepřepíše. Kterou verzi máš, uvidíš v **Nastavení** dole.
 
-Když máš Faktury stažené přes `git clone`, appka jen oznámí, že vyšla nová verze, a aktualizuješ je příkazem `git pull`.
-
-Aktualizace většinou mění jen soubory ve složce projektu, takže se macOS na nic znovu neptá.
-Když se změní i okno aplikace, aktualizace ho sama znovu sestaví a appku je potřeba zavřít a otevřít. Pak se macOS může jednou znovu zeptat na přístup ke složkám.
+Aktualizace mění jen soubory ve složce Faktur, ne samotnou aplikaci, takže se macOS na nic znovu neptá.
+Výjimečně se změní i okno aplikace. Pak se stáhne nová Faktury.app a appku je potřeba zavřít a otevřít. macOS se potom může jednou znovu zeptat na iCloud Drive.
 
 ## Soukromí
 
 Appka nemá žádný vlastní server ani účet a nic nikam neposílá. Data leží jen ve složce `data` u tebe na disku a v kopii na tvém iCloud Drive.
-Jediný dotaz ven jde do veřejného registru ARES, když načítáš firmu podle IČO.
+Ven jde jen dotaz do veřejného registru ARES, když načítáš firmu podle IČO, a dotaz na GitHub, jestli nevyšla nová verze.
 Appka poslouchá jen na `127.0.0.1`, takže se k ní nedostane nikdo jiný ze sítě.
 
 ## Kde jsou data
+
+Data jsou ve složce `~/Library/Application Support/Faktury/data` (ve vývojové instalaci ve složce `data` projektu). Přesnou cestu najdeš v Nastavení.
 
 | Cesta | Co obsahuje |
 |---|---|
@@ -95,7 +91,7 @@ Appka poslouchá jen na `127.0.0.1`, takže se k ní nedostane nikdo jiný ze s�
 Složka `data` se do gitu záměrně neukládá, protože obsahuje osobní údaje klientů.
 Stav zálohy do iCloudu je vidět v Nastavení. Z iCloudu se nic nemaže, kromě denních záloh starších než 30 dní.
 
-**Obnovení:** zavři okno Faktur, vypni server (`kill $(cat data/server.pid)`) a jedním z těchto způsobů vrať soubor `data/faktury.json`:
+**Obnovení:** zavři okno Faktur, vypni server (v Terminálu `kill $(cat ~/Library/Application\ Support/Faktury/data/server.pid)`) a jedním z těchto způsobů vrať soubor `data/faktury.json`:
 - zkopíruj na jeho místo vybraný soubor z `data/zalohy`,
 - nebo celý obsah složky `Faktury záloha` z iCloud Drive zkopíruj do `data/`.
 
@@ -126,20 +122,30 @@ V Přehledu je vidět v tabulce za daný rok a kliknutím ho upravíš nebo sma�
 
 ## Pro vývoj
 
+Vývojová instalace běží přímo ze složky projektu a data má v její podsložce `data`.
+Potřebuje Python 3.9+ a vývojářské nástroje od Applu (`xcode-select --install`), ze kterých se sestaví okno aplikace:
+
 ```sh
-python3 server.py --open                  # ruční spuštění
+git clone https://github.com/davidmalasek/faktury && cd faktury
+./instalovat.sh                           # sestaví Faktury.app do Aplikací (spouští Faktury z této složky)
+python3 server.py --open                  # ruční spuštění v prohlížeči
 python3 -m unittest discover tests        # testy
 python3 import_data.py soubor.json --zkouska   # import starých dat (formát popsán v souboru)
 ```
 
-Bez závislostí: Python ze systému nebo z Homebrew, backend na standardní knihovně a frontend v čistém JavaScriptu.
-Okno aplikace je v `macos/Faktury.swift` (AppKit a WebKit). Sestavuje ho `instalovat.sh`, takže po jeho změně spusť instalaci znovu.
+Bez závislostí: backend na standardní knihovně Pythonu a frontend v čistém JavaScriptu.
 PDF vytváří knihovna pdfmake, přibalená ve `static/vendor`.
 Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`.
 
+Okno aplikace je v `macos/Faktury.swift` (AppKit a WebKit) a sestavuje ho `macos/sestavit.sh`, a to ve dvou podobách.
+Vývojová podoba (`instalovat.sh`) spouští Faktury ze složky projektu. Podoba ke stažení (`Faktury.zip` z GitHub Actions) nese kód v sobě a při spuštění ho nakopíruje do `~/Library/Application Support/Faktury`.
+Do stejné složky si stáhne Python z [python-build-standalone](https://github.com/astral-sh/python-build-standalone) (verze a kontrolní součty jsou v `spustit.sh`).
+Po změně `macos/` nebo přesunutí složky projektu spusť `./instalovat.sh` znovu.
+
 **Vydání nové verze:** zvyš číslo v souboru `VERSION` (třeba z `1.0.0` na `1.1.0`) a pushni do `main`.
-Když projdou testy a sestavení na macOS, GitHub Actions vytvoří vydání `v1.1.0` se seznamem commitů od minulé verze. Ostatním se pak nová verze nainstaluje při dalším otevření Faktur.
+Když projdou testy a zkouška aplikace na macOS, GitHub Actions vytvoří vydání `v1.1.0` s `Faktury.zip` a seznamem commitů od minulé verze. Ostatním se pak nová verze nainstaluje při dalším otevření Faktur.
 Commity bez změny `VERSION` se nikomu neinstalují.
+Ve vývojové kopii z gitu se aktualizace neinstalují, aby nepřepsaly rozdělanou práci.
 
 **Každý rok** je potřeba zkontrolovat sazby a limity na začátku `static/app.js`:
 - doplnit rozhodnou částku pro sociální pojištění do `SOCIAL_LIMITS` (zveřejňuje se na podzim předchozího roku, 2026: 117 521 Kč),

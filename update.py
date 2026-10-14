@@ -5,8 +5,10 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -17,9 +19,11 @@ from pathlib import Path
 import db
 
 REPO = "davidmalasek/faktury"
-KEEP = {"data", ".git"}  # tyhle složky aktualizace nikdy nepřepíše
-# Když se změní některý z těchto souborů, je potřeba znovu sestavit okno aplikace (Faktury.app).
-APP_FILES = ("macos/Faktury.swift", "macos/Faktury.icns", "instalovat.sh")
+KEEP = {"data", ".git", "python"}  # tyhle složky aktualizace nikdy nepřepíše
+# Když se změní některý z těchto souborů, je potřeba nové okno aplikace (Faktury.app).
+APP_FILES = ("macos/Faktury.swift", "macos/Faktury.icns", "macos/sestavit.sh")
+# Faktury.app stažená z GitHubu (ne vývojová instalace) – sem ji předá při spuštění.
+APP_BUNDLE = os.environ.get("FAKTURY_APP")
 CHECK_EVERY = 3600  # GitHub se ptáme nejvýš jednou za hodinu
 RETRY_AFTER = 300   # po chybě (třeba bez internetu) za 5 minut
 
@@ -52,7 +56,9 @@ def latest_release():
         with urllib.request.urlopen(req, timeout=10) as r:
             d = json.load(r)
         release = {"tag": d["tag_name"], "version": d["tag_name"].lstrip("vV"),
-                   "notes": d.get("body") or "", "url": d.get("html_url") or ""}
+                   "notes": d.get("body") or "", "url": d.get("html_url") or "",
+                   "app_url": next((a["browser_download_url"] for a in d.get("assets") or []
+                                    if a.get("name") == "Faktury.zip"), None)}
         _cache.update(at=now, release=release)
     except (OSError, ValueError, KeyError):  # bez internetu, GitHub nedostupný, zatím žádné vydání
         _cache["at"] = now - CHECK_EVERY + RETRY_AFTER
@@ -67,7 +73,7 @@ def status(root=db.ROOT):
         "latest": release and release["version"],
         "available": bool(release) and parse_version(release["version"]) > parse_version(current),
         "url": release and release["url"],
-        "git": (root / ".git").exists(),  # z gitu se aktualizuje přes git pull
+        "git": (root / ".git").exists(),  # vývojová kopie – tu aktualizace nepřepisuje
     }
 
 
@@ -110,8 +116,8 @@ def apply_zip(content, root=db.ROOT, version=None):
 
 def install(root=db.ROOT):
     """Stáhne a nainstaluje poslední vydání. Před tím zazálohuje data."""
-    if (root / ".git").exists():
-        raise ValueError("Faktury jsou stažené přes git – aktualizuj je příkazem git pull.")
+    if (root / ".git").exists():  # nepřepsat rozdělanou práci ve vývojové kopii
+        raise ValueError("Vývojová kopie z gitu se automaticky neaktualizuje.")
     if not _running.acquire(blocking=False):
         raise ValueError("Aktualizace už běží.")
     try:
@@ -133,14 +139,44 @@ def install(root=db.ROOT):
         except zipfile.BadZipFile:
             raise ValueError("Stažená aktualizace je poškozená.")
         result = {"version": release["version"], "app_changed": app_changed}
-        if result["app_changed"]:
-            # Okno aplikace se změnilo – sestaví se znovu (projeví se po dalším otevření).
-            build = subprocess.run(["./instalovat.sh"], cwd=root, capture_output=True, text=True)
-            result["app_error"] = build.returncode != 0
-            print(build.stdout, build.stderr, file=sys.stderr, flush=True)
+        if app_changed:  # projeví se po dalším otevření aplikace
+            result["app_error"] = replace_app(release) if APP_BUNDLE else rebuild_app(root)
         return result
     finally:
         _running.release()
+
+
+def replace_app(release):
+    """Aplikace z GitHubu: stáhne novou Faktury.app a vymění ji za tu, která běží. Vrátí chybu, nebo None."""
+    app = Path(APP_BUNDLE)
+    if "/AppTranslocation/" in str(app):  # macOS ji spouští z dočasného místa, protože není v Aplikacích
+        return "Nové okno aplikace se nenainstalovalo, protože Faktury nejsou ve složce Aplikace. Přesuň je tam."
+    if not release.get("app_url"):
+        return "K téhle verzi chybí aplikace ke stažení."
+    tmp = Path(tempfile.mkdtemp(prefix=".faktury-", dir=app.parent))
+    try:
+        req = urllib.request.Request(release["app_url"], headers={"User-Agent": "Faktury"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            (tmp / "Faktury.zip").write_bytes(r.read())
+        subprocess.run(["ditto", "-x", "-k", str(tmp / "Faktury.zip"), str(tmp)], check=True)
+        new = tmp / "Faktury.app"
+        if not (new / "Contents/MacOS/Faktury").exists():
+            raise OSError("v archivu chybí Faktury.app")
+        os.rename(app, tmp / "stara.app")
+        os.rename(new, app)
+        return None
+    except (OSError, subprocess.CalledProcessError) as e:
+        print(f"Výměna Faktury.app selhala: {e}", file=sys.stderr, flush=True)
+        return "Nové okno aplikace se nepodařilo nainstalovat. Stáhni si Faktury znovu z GitHubu."
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def rebuild_app(root):
+    """Vývojová instalace: sestaví okno aplikace znovu ze zdrojáků. Vrátí chybu, nebo None."""
+    build = subprocess.run(["bash", "instalovat.sh"], cwd=root, capture_output=True, text=True)
+    print(build.stdout, build.stderr, file=sys.stderr, flush=True)
+    return None if build.returncode == 0 else "Okno aplikace se nepodařilo sestavit – spusť ve složce Faktur instalovat.sh."
 
 
 def restart_later(delay=0.5):

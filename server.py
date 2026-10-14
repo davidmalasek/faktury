@@ -11,6 +11,7 @@ import urllib.request
 import webbrowser
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import db
@@ -263,7 +264,7 @@ class Handler(BaseHTTPRequestHandler):
             return {"number": db.next_number(data)}
 
         elif res == "zaloha" and method == "GET":
-            return db.cloud_status
+            return {**db.cloud_status, "data": str(db.DATA).replace(str(Path.home()), "~", 1)}
 
         elif res == "export" and method == "GET":
             name = f"faktury-zaloha-{date.today().isoformat()}.json"

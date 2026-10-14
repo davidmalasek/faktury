@@ -1249,8 +1249,8 @@ async function viewSettings() {
       <div id="preview-box"></div>
       <section class="card" style="margin-top:32px">
         <h2>Data a zálohy</h2>
-        <p style="margin-top:0">Všechno je ve složce <b>data</b> vedle aplikace: <b>faktury.json</b> (faktury, kontakty, nastavení) a <b>archiv</b> (PDF všech faktur).
-        Před první změnou každého dne se uloží kopie do <b>data/zalohy</b> (posledních 30 dní).</p>
+        <p style="margin-top:0">Všechno je ve složce <b>${esc(cloud.data)}</b>: <b>faktury.json</b> (faktury, kontakty, nastavení) a <b>archiv</b> (PDF všech faktur).
+        Před první změnou každého dne se uloží kopie do <b>zalohy</b> (posledních 30 dní).</p>
         ${cloudStatus(cloud)}
         <a class="btn" href="/api/export" download>Stáhnout zálohu dat</a>
       </section>
@@ -1348,10 +1348,8 @@ function updateBar(html, action = '') {
 /** Při otevření appky zjistí, jestli na GitHubu nevyšla nová verze, a rovnou ji nainstaluje. */
 async function checkForUpdate() {
   const u = await api('update').catch(() => null);
-  if (!u?.available) return;
-  if (u.git) {
-    updateBar(`Vyšla nová verze Faktur ${esc(u.latest)}. Aktualizuješ ji příkazem <b>git pull</b>.`);
-  } else if (leaveGuard?.()) {
+  if (!u?.available || u.git) return; // vývojová kopie z gitu se neaktualizuje
+  if (leaveGuard?.()) {
     updateBar(`Vyšla nová verze Faktur ${esc(u.latest)}.`, '<button class="btn primary" data-update>Aktualizovat</button>');
   } else {
     installUpdate();
@@ -1387,7 +1385,7 @@ function announceUpdate() {
   } catch {}
   if (!result) return;
   const done = `Faktury jsou aktualizované na verzi ${esc(result.version)}.`;
-  if (result.app_error) updateBar(`${done} Jen okno aplikace se nepodařilo sestavit – spusť ve složce Faktur <b>./instalovat.sh</b>.`);
+  if (result.app_error) updateBar(`${done} ${esc(result.app_error)}`);
   else if (result.app_changed) updateBar(`${done} Zavři Faktury a otevři je znovu, ať se načte i nové okno aplikace.`);
   else toast(done);
 }
@@ -1399,7 +1397,7 @@ async function showVersion() {
   let html = `Máš verzi <b>${esc(u.version)}</b>. `;
   if (!u.latest) html += 'Nové verze se hledají na GitHubu při každém otevření Faktur.';
   else if (!u.available) html += 'Je to nejnovější verze ✓';
-  else if (u.git) html += `Vyšla verze ${esc(u.latest)}, aktualizuješ ji příkazem <b>git pull</b>.`;
+  else if (u.git) html += `Vyšla verze ${esc(u.latest)}. Tohle je vývojová kopie z gitu, takže se aktualizace neinstalují.`;
   else html += `Vyšla verze ${esc(u.latest)}. <button class="btn primary" data-update>Aktualizovat</button>`;
   if (u.url) html += ` <a href="${esc(u.url)}" target="_blank" rel="noopener">Co je nového</a>`;
   el.innerHTML = html;

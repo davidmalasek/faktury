@@ -303,6 +303,7 @@ class UpdateTests(TempData):
             "spustit.sh": ("#!/bin/bash", 0o755),
             "static/novy.js": ("// nový soubor", 0o644),
             "data/faktury.json": ("cizí data", 0o644),
+            "python/bin/python3": ("cizí python", 0o755),
         })
         self.assertFalse(update.apply_zip(content, self.root, "1.1.0"))  # okno se nezměnilo
         self.assertEqual(update.current_version(self.root), "1.1.0")
@@ -310,6 +311,7 @@ class UpdateTests(TempData):
         self.assertEqual((self.root / "static/novy.js").read_text(encoding="utf-8"), "// nový soubor")
         self.assertEqual((self.root / "data/faktury.json").read_text(encoding="utf-8"), "moje data")
         self.assertTrue((self.root / "spustit.sh").stat().st_mode & 0o100)
+        self.assertFalse((self.root / "python").exists())
 
     def test_apply_reports_changed_app_window(self):
         content = release_zip("1.1.0", {"macos/Faktury.swift": ("nové okno", 0o644)})
@@ -327,7 +329,7 @@ class UpdateTests(TempData):
             self.assertTrue(update.status(self.root)["available"])
             (self.root / ".git").mkdir()
             self.assertTrue(update.status(self.root)["git"])
-            with self.assertRaisesRegex(ValueError, "git pull"):
+            with self.assertRaisesRegex(ValueError, "gitu"):
                 update.install(self.root)
         with self.latest("1.0.0"):
             self.assertFalse(update.status(self.root)["available"])

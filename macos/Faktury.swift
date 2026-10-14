@@ -1,35 +1,96 @@
 // Faktury.app – vlastní okno aplikace. Spustí lokální server (spustit.sh) a zobrazí ho ve WebKitu.
-// Sestavuje ho instalovat.sh. Složku projektu najde v Info.plist pod klíčem FakturyFolder.
+// Sestavuje ho macos/sestavit.sh ve dvou podobách:
+// - vývojová (instalovat.sh): spouští Faktury ze složky projektu, cestu má v Info.plist (FakturyFolder),
+// - ke stažení z GitHubu: kód nese v Resources/app a při spuštění ho nakopíruje do Application Support,
+//   kde žijí i data a vlastní Python. Aktualizace pak mění jen tu složku, samotná aplikace zůstává.
 import AppKit
 import WebKit
 
-/// Spustí server přes spustit.sh, pokud ještě neběží. Vrátí popis chyby, nebo nil.
-/// Běží mimo hlavní vlákno: první přístup do Dokumentů může čekat na povolení od macOS.
-func startServer(folder: String) -> String? {
-    let launcher = URL(fileURLWithPath: folder).appendingPathComponent("spustit.sh")
-    guard !folder.isEmpty, FileManager.default.isExecutableFile(atPath: launcher.path) else {
-        return "Složka aplikace není na svém místě:\n\(folder)\n\n"
-            + "Pokud se přesunula, spusť v ní znovu instalovat.sh. "
-            + "Pokud mají Faktury zakázaný přístup ke složce, povol ho v Nastavení systému → "
-            + "Soukromí a zabezpečení → Soubory a složky."
+/// Složka s kódem a daty Faktur.
+func fakturyFolder() -> URL {
+    if let path = Bundle.main.object(forInfoDictionaryKey: "FakturyFolder") as? String {
+        return URL(fileURLWithPath: path)
     }
+    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    return support.appendingPathComponent("Faktury")
+}
+
+/// Verze ze souboru VERSION, třeba [1, 2, 0]. Prázdná, když soubor chybí.
+func fakturyVersion(_ folder: URL) -> [Int] {
+    let text = (try? String(contentsOf: folder.appendingPathComponent("VERSION"), encoding: .utf8)) ?? ""
+    return text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ".").map { Int($0) ?? 0 }
+}
+
+/// Spustí program a vrátí jeho návratový kód a chybový výstup.
+func runTool(_ path: String, _ arguments: [String], environment: [String: String]? = nil) -> (status: Int32, error: String) {
     let process = Process()
-    process.executableURL = launcher
+    process.executableURL = URL(fileURLWithPath: path)
+    process.arguments = arguments
+    if let environment = environment {
+        process.environment = environment
+    }
+    let pipe = Pipe()
+    process.standardError = pipe
     do {
         try process.run()
     } catch {
-        return error.localizedDescription
+        return (-1, error.localizedDescription)
     }
+    let output = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
-    if process.terminationStatus != 0 {
-        return "Server se nepodařilo spustit. Podrobnosti jsou v souboru data/server.log ve složce aplikace."
+    return (process.terminationStatus, String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
+}
+
+/// Připraví složku Faktur a spustí server přes spustit.sh, pokud ještě neběží. Vrátí popis chyby, nebo nil.
+/// Běží mimo hlavní vlákno: při prvním spuštění se stahuje Python a přístup ke složkám může čekat na macOS.
+func startServer(folder: URL) -> String? {
+    var environment = ProcessInfo.processInfo.environment
+    let launcher = folder.appendingPathComponent("spustit.sh")
+    if Bundle.main.object(forInfoDictionaryKey: "FakturyFolder") != nil {
+        guard FileManager.default.isReadableFile(atPath: launcher.path) else {
+            return "Složka aplikace není na svém místě:\n\(folder.path)\n\n"
+                + "Pokud se přesunula, spusť v ní znovu instalovat.sh. "
+                + "Pokud mají Faktury zakázaný přístup ke složce, povol ho v Nastavení systému → "
+                + "Soukromí a zabezpečení → Soubory a složky."
+        }
+    } else {
+        // Aplikace z GitHubu přinesla novější kód, než je ve složce (nebo složka ještě není): nakopíruje ho tam.
+        let bundled = Bundle.main.resourceURL!.appendingPathComponent("app")
+        if fakturyVersion(folder).lexicographicallyPrecedes(fakturyVersion(bundled)) {
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let copy = runTool("/usr/bin/ditto", ["--noqtn", bundled.path, folder.path])
+            if copy.status != 0 {
+                return "Nepodařilo se připravit složku \(folder.path). \(copy.error)"
+            }
+        }
+        environment["FAKTURY_APP"] = Bundle.main.bundlePath
+    }
+    let result = runTool("/bin/bash", [launcher.path], environment: environment)
+    if result.status != 0 {
+        let detail = result.error.isEmpty ? "Podrobnosti jsou v souboru data/server.log ve složce Faktur." : result.error
+        return "Server se nepodařilo spustit. \(detail)"
     }
     return nil
 }
 
+/// Co je v okně vidět, než naběhne server. Text se ukáže, až když spuštění trvá déle.
+let startPage = """
+    <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="light dark">
+    <style>
+    body { margin: 0; height: 100vh; display: flex; align-items: center; justify-content: center;
+           font: 15px/1.5 -apple-system, sans-serif; background: #f5f5f7; color: #6e6e73; text-align: center; }
+    @media (prefers-color-scheme: dark) { body { background: #000; color: #98989d; } }
+    p { opacity: 0; animation: show 0.3s 1s forwards; }
+    b { color: CanvasText; font-weight: 600; }
+    @keyframes show { to { opacity: 1; } }
+    </style>
+    <p><b>Spouštím Faktury…</b><br>Při prvním spuštění se stahují potřebné součásti, může to minutu trvat.</p>
+    """
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     let url = URL(string: "http://localhost:8765/")!
+    let folder = fakturyFolder()
     let zoomSteps: [CGFloat] = [0.5, 0.67, 0.75, 0.85, 1, 1.1, 1.25, 1.5, 1.75, 2]
     var window: NSWindow!
     var webView: WKWebView!
@@ -47,7 +108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         webView.allowsBackForwardNavigationGestures = true
         let zoom = UserDefaults.standard.double(forKey: "zoom")
         webView.pageZoom = zoom > 0 ? CGFloat(zoom) : 1
-        webView.isHidden = true  // ukáže se až načtená stránka, ať okno nebliká bíle
         titleObservation = webView.observe(\.title) { [weak self] webView, _ in
             let title = (webView.title ?? "").replacingOccurrences(of: " – Faktury", with: "")
             self?.window.title = title.isEmpty ? "Faktury" : title
@@ -70,13 +130,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         _ = window.setFrameAutosaveName("Faktury")
 
         NSApp.mainMenu = makeMainMenu()
+        webView.loadHTMLString(startPage, baseURL: nil)
         window.makeKeyAndOrderFront(nil)
         connect()
     }
 
     /// Spustí server (pokud neběží) a načte do okna appku.
     func connect() {
-        let folder = Bundle.main.object(forInfoDictionaryKey: "FakturyFolder") as? String ?? ""
+        let folder = self.folder
         DispatchQueue.global(qos: .userInitiated).async {
             let error = startServer(folder: folder)
             DispatchQueue.main.async {
@@ -179,10 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if webView.isHidden {
-            webView.isHidden = false
-            window.makeFirstResponder(webView)
-        }
+        window.makeFirstResponder(webView)
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
@@ -265,6 +323,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
 
     // ---------- menu ----------
 
+    /// O aplikaci: verze kódu ze složky Faktur (aktualizace mění jen ji, ne aplikaci).
+    @objc func showAbout(_ sender: Any?) {
+        let version = fakturyVersion(folder).map(String.init).joined(separator: ".")
+        NSApp.orderFrontStandardAboutPanel(options: [.applicationVersion: version, .version: ""])
+    }
+
     @objc func actualSize(_ sender: Any?) { setZoom(1) }
     @objc func zoomIn(_ sender: Any?) { setZoom(zoomSteps.first { $0 > webView.pageZoom + 0.01 } ?? webView.pageZoom) }
     @objc func zoomOut(_ sender: Any?) { setZoom(zoomSteps.last { $0 < webView.pageZoom - 0.01 } ?? webView.pageZoom) }
@@ -293,7 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         }
 
         _ = submenu("Faktury", [
-            item("O aplikaci Faktury", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
+            item("O aplikaci Faktury", #selector(showAbout(_:)), "", target: self),
             .separator(),
             item("Skrýt aplikaci Faktury", #selector(NSApplication.hide(_:)), "h"),
             item("Skrýt ostatní", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
