@@ -44,6 +44,7 @@ DEFAULT_SETTINGS = {
     "footer_note": "",
     "due_days": 14,
     "side_activity": True,  # vedlejší činnost (student) – přehled hlídá limit pro sociální pojištění
+    "student": False,       # sleva na studenta (od roku 2027 znovu, viz limity.json)
     "expense_rate": 60,     # výdajový paušál v %, 0 = skutečné výdaje
 }
 EXPENSE_RATES = (80, 60, 40, 0)
@@ -312,6 +313,7 @@ def pdf_name(number, issue_date):
 # ---------- nastavení ----------
 
 def get_settings(data):
+    """Nastavení i s odkliknutými připomínkami úřadů (done, viz dane.py), ty se mění jen přes /api/terminy."""
     return {**DEFAULT_SETTINGS, **data.get("settings", {})}
 
 

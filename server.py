@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import dane
 import db
 import mejvos
 import update
@@ -174,6 +175,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(ares_lookup(str(rid)))
         if res == "version" and method == "GET":
             return self.send_json({"version": update.current_version()})
+        if res == "limity" and rid is None and method == "GET":
+            return self.send_json(dane.table())
         if res == "update" and rid is None:
             if method == "GET":
                 return self.send_json(update.status())
@@ -297,6 +300,13 @@ class Handler(BaseHTTPRequestHandler):
             if rid == "invoices" and sub == "delete" and method == "POST":
                 return db.delete_linked_invoice(data, body)
 
+        elif res == "terminy":  # připomínky úřadů; co uživatel odklikne, uloží se do nastavení
+            if rid is None and method == "GET":
+                return dane.reminders(data)
+            if isinstance(rid, str) and method == "PUT":
+                dane.set_done(data, rid, body.get("done"))
+                return dane.reminders(data)
+
         elif res == "next-number" and method == "GET":
             return {"number": db.next_number(data)}
 
@@ -324,6 +334,7 @@ def main():
     except OSError:
         sys.exit(f"Port {PORT} je obsazený – Faktury už nejspíš běží. "
                  f"Otevři http://localhost:{PORT}")
+    dane.start_refresh()  # nové limity (třeba rozhodná částka na další rok) z GitHubu
     url = f"http://localhost:{PORT}"
     (db.DATA / "server.pid").write_text(str(os.getpid()))  # spouštěč podle něj pozná starou verzi
     mejvos.announce(db.APP_ID, name=NAME, version=update.current_version(), port=PORT, root=db.ROOT,

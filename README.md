@@ -31,7 +31,8 @@ Hodí se i při podnikání během studia nebo vedle zaměstnání (vedlejší �
 - **Kontakty s načtením z ARES.** Stačí zadat IČO a název s adresou se doplní.
 - **Přehled za rok:** příjmy po měsících, největší odběratelé, co čeká na platbu a co je po splatnosti.
 - **Odhad daně a pojištění** z přijatých plateb a výdajového paušálu.
-- **Hlídání limitů:** obrat pro registraci k DPH a rozhodná částka pro sociální pojištění. Varuje už při psaní faktury, která by limit přetáhla.
+- **Hlídání limitů:** obrat pro registraci k DPH a rozhodná částka pro sociální pojištění. Varuje už při psaní faktury, která by limit přetáhla. Nové limity na další rok si appka sama stáhne.
+- **Termíny pro úřady:** připomene daňové přiznání a přehledy pro ČSSZ a zdravotní pojišťovnu i s odhadem, kolik zaplatíš. Až je podáš, odklikneš je.
 - **Příjmy bez faktury** (třeba vyúčtování od pořadatele) i s přiloženým dokladem.
 - **Zálohy:** každý den automaticky, po každé změně kopie do iCloud Drive. Smazané PDF se jen přesunou stranou.
 - **Import starých faktur** z JSON souboru i s původními PDF.
@@ -86,7 +87,7 @@ Výjimečně se změní i okno aplikace. Pak se stáhne nová Faktury.app a appk
 ## Soukromí
 
 Appka nemá žádný vlastní server ani účet a nic nikam neposílá. Data leží jen ve složce `data` u tebe na disku a v kopii na tvém iCloud Drive.
-Ven jde jen dotaz do veřejného registru ARES, když načítáš firmu podle IČO, a dotaz na GitHub, jestli nevyšla nová verze. S Hodinovkou si data předávají jen tady na Macu.
+Ven jde jen dotaz do veřejného registru ARES, když načítáš firmu podle IČO, a dotazy na GitHub, jestli nevyšla nová verze nebo nové limity (`limity.json`). Na GitHub se nic neposílá. S Hodinovkou si data předávají jen tady na Macu.
 Appka poslouchá jen na `127.0.0.1`, takže se k ní nedostane nikdo jiný ze sítě.
 
 ## Kde jsou data
@@ -95,7 +96,8 @@ Data jsou ve složce `~/Library/Application Support/Faktury/data` (ve vývojové
 
 | Cesta | Co obsahuje |
 |---|---|
-| `data/faktury.json` | faktury, kontakty, nastavení (čitelný text) |
+| `data/faktury.json` | faktury, kontakty, nastavení i odkliknuté připomínky (čitelný text) |
+| `data/limity.json` | nové sazby a limity stažené z GitHubu (když jsou novější než ty v aplikaci) |
 | `data/archiv/ROK/` | PDF všech faktur a doklady k příjmům bez faktury |
 | `data/zalohy/` | automatická záloha před první změnou každého dne (30 dní) a před každým importem a aktualizací |
 | `data/smazane/` | PDF smazaných faktur a dokladů (nic se nemaže natrvalo) |
@@ -119,13 +121,31 @@ Zisk se počítá jako přijaté platby (včetně příjmů bez faktury) minus v
 - **Sociální pojištění:** 29,2 % z 55 % zisku, ale jen když zisk za rok dosáhne rozhodné částky. Měřák v kartě hlídá, kolik ještě můžeš přijmout.
 - **DPH:** když obrat za kalendářní rok přesáhne 2 000 000 Kč, budeš plátce od 1. 1. dalšího roku. Nad 2 536 500 Kč hned ode dne po překročení.
 
+- **Sleva na studenta** (4 020 Kč) se od roku 2027 vrací. Odečte se, když v Nastavení zaškrtneš „Studuju“.
+
 Počítá se jen s příjmy z podnikání. Jiné příjmy (třeba brigáda), skutečné výdaje a sazba daně 23 % pro velmi vysoké příjmy se nezohledňují.
 
 **Varování u limitů:** u DPH, sociálního pojištění a hranice, kterou ještě pokryje sleva na dani, appka ukazuje ✅ / ⚠️ (od 75 %) / 🔴 (od 90 %, po překročení nebo když by limit přetáhly čekající platby).
 Upozornění jsou nahoře v Přehledu (za letošek), v měřácích a ve formuláři faktury i příjmu, když by částka limit přetáhla.
 Hranice 75 % a 90 % se mění v `static/charts.js` (`LIMIT_WARN`, `LIMIT_BAD`).
 
-> Částky jsou orientační a platí pro roky 2025 a 2026. Daňové přiznání ani přehledy pro pojišťovny appka nevyplní a nenahrazuje účetní ani daňového poradce.
+> Částky jsou orientační a platí pro roky 2025 až 2027. Daňové přiznání ani přehledy pro pojišťovny appka nevyplní a nenahrazuje účetní ani daňového poradce.
+
+## Termíny a nové limity
+
+**Termíny.** Od 1. ledna je v Přehledu karta **Úřady za rok …** s tím, co je potřeba podat za minulý rok a do kdy:
+
+- **Daňové přiznání** na finanční úřad, elektronicky do 1. 5. (OSVČ má datovou schránku, takže podává elektronicky). Daň se platí ve stejné lhůtě.
+- **Přehled pro ČSSZ** a **přehled pro zdravotní pojišťovnu** do měsíce po lhůtě pro přiznání. Když přiznání podáš do 1. 4., platí dřívější termín. Kdo přiznání podávat nemusí (příjmy do 50 000 Kč), podá přehled pojišťovně do 8. 4. Doplatek pojistného se platí do 8 dnů od podání.
+
+Termíny se posouvají na nejbližší pracovní den (víkendy, svátky i Velikonoce). U každého je odhad daně nebo pojistného z Faktur a odkaz na MOJE daně nebo ePortál ČSSZ.
+Měsíc před termínem se úkol zbarví oranžově, týden před ním červeně. Až ho podáš, klikni na **Podáno…** a vyber datum. Podle něj appka přepočítá termíny přehledů a připomene doplatek.
+Odkliknuté úkoly se uloží do nastavení (v Nastavení → Podnikání je jde vrátit). Neodkliknutý úkol zmizí 60 dní po termínu.
+Počítá se s podáním bez daňového poradce. Karta se ukáže jen za rok, ve kterém máš nějakou fakturu nebo příjem.
+
+**Nové limity.** Sazby a limity podle roku jsou v souboru [`limity.json`](limity.json). Faktury se na GitHub dívají po nových limitech každých 6 hodin. Když přibydou (třeba rozhodná částka na další rok, zveřejňuje se na podzim), stáhnou si je samy a nemusí čekat na novou verzi.
+Od 1. ledna pak v Přehledu ukážou, co se oproti loňsku změnilo. Po kliknutí na **Rozumím** se upozornění už neukáže.
+Když appka limity pro letošek ještě nezná, počítá s loňskými a v kartě Daň a pojištění to napíše.
 
 ## Příjmy bez faktury
 
@@ -163,9 +183,10 @@ Když projdou testy a zkouška aplikace na macOS, GitHub Actions vytvoří vydá
 Commity bez změny `VERSION` se nikomu neinstalují.
 Ve vývojové kopii z gitu se aktualizace neinstalují, aby nepřepsaly rozdělanou práci.
 
-**Každý rok** je potřeba zkontrolovat sazby a limity na začátku `static/app.js`:
-- doplnit rozhodnou částku pro sociální pojištění do `SOCIAL_LIMITS` (zveřejňuje se na podzim předchozího roku, 2026: 117 521 Kč),
-- od roku 2027 se má vrátit sleva na studenta 4 020 Kč. Až bude platit, je potřeba ji přičíst k `TAX_CREDIT`.
+**Každý rok na podzim** je potřeba doplnit do [`limity.json`](limity.json) další rok: zkopírovat poslední rok a změnit, co se změnilo.
+Rozhodná částka pro sociální pojištění je 2,4násobek průměrné mzdy zaokrouhlený nahoru (průměrnou mzdu vyhlašuje vláda nařízením na podzim, pro rok 2027: 51 663 Kč → 123 992 Kč). Zkontrolovat i slevy na dani, sazby a limit pro DPH.
+Pak zvýšit `updated` na dnešní datum a pushnout do `main`. Novou verzi vydávat nemusíš: Faktury si limity stáhnou samy (`dane.py`). Formát hlídá test `test_bundled_limits`.
+Termíny pro úřady se počítají ze zákonných lhůt (`dane.deadlines`), takže se upravují jen při změně zákona.
 
 ## Licence
 

@@ -5,6 +5,8 @@ data/
 *.pdf
 # podklady k importu (import_data.py)
 /*.json
+# sazby a limity podle roku patří k aplikaci
+!/limity.json
 
 # Spouštěč se vytváří skriptem instalovat.sh
 Faktury.app/

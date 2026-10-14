@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import dane  # noqa: E402
 import db  # noqa: E402
 import import_data  # noqa: E402
 import mejvos  # noqa: E402
@@ -506,6 +507,126 @@ class UpdateTests(TempData):
         self.assertEqual(len(list(db.ZALOHY.glob("pred-aktualizaci-*.json"))), 1)
 
 
+class TaxTests(TempData):
+    """Sazby a limity podle roku (limity.json) a termíny pro úřady."""
+
+    def remote(self, table=None, error=None):
+        """Podvrhne odpověď GitHubu na limity.json."""
+        body = json.dumps(table).encode() if isinstance(table, dict) else table
+
+        class Response(BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        return mock.patch.object(dane.urllib.request, "urlopen",
+                                 side_effect=error or (lambda *a, **k: Response(body)))
+
+    def table(self, updated, **year_2030):
+        t = dane.table()
+        row = dict(t["years"][max(t["years"])], **year_2030)
+        return {"updated": updated, "years": {**t["years"], "2030": row}}
+
+    def test_bundled_limits(self):
+        t = dane.validate(json.loads(dane.BUNDLED.read_text(encoding="utf-8")))
+        years = sorted(int(y) for y in t["years"])
+        self.assertEqual(years, list(range(years[0], years[-1] + 1)))  # žádný rok nechybí
+        limits = [t["years"][str(y)]["social_limit"] for y in years]
+        self.assertEqual(limits, sorted(limits))
+        self.assertEqual(t["years"]["2026"]["social_limit"], 117521)
+        self.assertEqual(t["years"]["2027"]["student_credit"], 4020)
+
+    def test_newer_limits_are_downloaded(self):
+        newer = self.table("2999-01-01", social_limit=150000)
+        with self.remote(newer):
+            self.assertTrue(dane.refresh())
+        self.assertEqual(dane.table()["years"]["2030"]["social_limit"], 150000)
+        with self.remote(newer):
+            self.assertFalse(dane.refresh())  # nic nového
+        with self.remote(self.table("2000-01-01")):
+            self.assertFalse(dane.refresh())  # starší než přibalené
+        self.assertEqual(dane.table()["updated"], "2999-01-01")
+
+    def test_broken_download_keeps_limits(self):
+        before = dane.table()
+        broken = self.table("2999-01-01")
+        del broken["years"]["2030"]["tax_credit"]
+        for response in (broken, b"<html>", {"updated": "2999-01-01", "years": {}}):
+            with self.remote(response):
+                self.assertFalse(dane.refresh())
+        with self.remote(error=urllib.error.URLError("offline")):
+            self.assertFalse(dane.refresh())
+        self.assertEqual(dane.table(), before)
+        dane.cache_file().write_text("{rozbité", encoding="utf-8")  # rozbitá kopie se ignoruje
+        self.assertEqual(dane.table(), before)
+
+    def test_deadlines(self):
+        d = {k: v.isoformat() for k, v in dane.deadlines(2025).items()}
+        self.assertEqual(d, {"dp_base": "2026-04-01", "dp": "2026-05-04", "review_base": "2026-05-04",
+                             "review": "2026-06-04", "zp_no_dp": "2026-04-08"})
+        d = dane.deadlines(2023)  # 1. 4. 2024 bylo Velikonoční pondělí
+        self.assertEqual((d["dp_base"], d["dp"], d["review"]), (date(2024, 4, 2), date(2024, 5, 2), date(2024, 6, 3)))
+        self.assertEqual(dane.easter(2027), date(2027, 3, 28))
+        self.assertEqual(dane.workday(date(2026, 12, 24)), date(2026, 12, 28))  # Štědrý den je čtvrtek
+        self.assertEqual(dane.month_later(date(2027, 1, 31)), date(2027, 2, 28))
+
+    def reminders(self, today):
+        with db.open_data() as data:
+            return {i["kind"]: i for i in dane.reminders(data, today)["items"]}, dane.reminders(data, today)["show"]
+
+    def mark(self, key, value, today):
+        with db.open_data(True) as data:
+            dane.set_done(data, key, value, today)
+
+    def test_reminders_follow_what_was_filed(self):
+        feb = date(2027, 2, 10)
+        self.assertEqual(self.reminders(feb), ({}, False))  # v roce 2026 nic nebylo
+        with db.open_data(True) as data:
+            db.save_invoice(data, invoice("1", issue="2026-11-02", due="2026-11-16"))
+        items, show = self.reminders(feb)
+        self.assertTrue(show)
+        self.assertEqual([items[k]["due"] for k in ("dp", "cssz", "zp")], ["2027-05-03", "2027-05-03", "2027-05-03"])
+        self.assertEqual(items["cssz"]["later"], "2027-06-03")  # přiznání podané po 1. 4. termín posune
+
+        self.mark("dp-2026", "2027-04-20", date(2027, 4, 20))
+        items, _ = self.reminders(date(2027, 4, 20))
+        self.assertEqual((items["cssz"]["due"], items["zp"]["due"], items["cssz"]["later"]), ("2027-06-03", "2027-06-03", None))
+        self.mark("dp-2026", "2027-03-20", feb.replace(month=3, day=20))
+        self.assertEqual(self.reminders(date(2027, 4, 2))[0]["cssz"]["due"], "2027-05-03")
+        self.mark("dp-2026", dane.SKIP, feb)
+        items, _ = self.reminders(feb)
+        self.assertEqual((items["cssz"]["due"], items["zp"]["due"]), ("2027-05-03", "2027-04-08"))
+
+        self.mark("cssz-2026", "2027-04-30", date(2027, 5, 1))
+        self.mark("zp-2026", "2027-04-07", date(2027, 5, 1))
+        items, show = self.reminders(date(2027, 5, 3))
+        self.assertEqual(items["cssz"]["pay_by"], "2027-05-10")  # doplatek do 8 dnů (8. 5. je svátek, 9. 5. neděle)
+        self.assertTrue(show)
+        self.assertFalse(self.reminders(date(2027, 5, 11))[1])  # vše podané i zaplacené
+        self.assertEqual(self.stored()["settings"]["done"], {"dp-2026": "nepodavam", "cssz-2026": "2027-04-30", "zp-2026": "2027-04-07"})
+
+        self.mark("cssz-2026", None, date(2027, 5, 11))
+        self.assertTrue(self.reminders(date(2027, 5, 11))[1])
+        self.assertFalse(self.reminders(date(2027, 7, 3))[1])  # 60 dní po termínu už nestraší
+
+    def test_set_done_validation(self):
+        today = date(2027, 3, 1)
+        with db.open_data() as data:
+            for key, value in (("dane-2026", "2027-03-01"), ("dp-26", "2027-03-01"), ("cssz-2026", dane.SKIP),
+                               ("dp-2026", "zítra"), ("dp-2026", "2027-03-02")):
+                with self.assertRaises(ValueError, msg=key):
+                    dane.set_done(data, key, value, today)
+
+    def test_settings_keep_done(self):
+        self.mark("limity-2027", "2027-01-02", date(2027, 1, 2))
+        with db.open_data(True) as data:
+            db.save_settings(data, {"name": "Jan", "student": True, "done": {}})
+        settings = self.stored()["settings"]
+        self.assertEqual((settings["done"], settings["student"]), ({"limity-2027": "2027-01-02"}, True))
+
+
 class ServerTests(TempData):
     def setUp(self):
         super().setUp()
@@ -606,6 +727,20 @@ class ServerTests(TempData):
         self.assertEqual(own, now["rev"])
         EcosystemTests.peer(self, [{"uid": "u1", "name": "Pekárna"}])  # Hodinovka zveřejnila klienty
         self.assertNotEqual(self.call("GET", "/api/rev")[1], now)
+
+    def test_limits_and_reminders(self):
+        status, table = self.call("GET", "/api/limity")
+        self.assertEqual((status, table), (200, dane.table()))
+        status, body = self.call("GET", "/api/terminy")
+        self.assertEqual((status, body["year"], body["items"]), (200, int(YEAR) - 1, []))
+        today = date.today().isoformat()
+        status, _ = self.call("PUT", f"/api/terminy/zp-{int(YEAR) - 1}", {"done": today})
+        self.assertEqual(status, 200)
+        self.assertEqual(self.call("GET", "/api/settings")[1]["done"], {f"zp-{int(YEAR) - 1}": today})
+        self.assertEqual(self.call("PUT", "/api/terminy/zp-1", {"done": today})[0], 400)
+        self.assertEqual(self.call("PUT", f"/api/terminy/zp-{YEAR}", {"done": None})[0], 200)
+        status, _ = self.call("PUT", f"/api/terminy/zp-{YEAR}", {"done": today}, headers={"Origin": "https://evil.example"})
+        self.assertEqual(status, 403)
 
     def test_static_files_cannot_escape(self):
         self.assertEqual(self.call("GET", "/../db.py")[0], 404)

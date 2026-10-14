@@ -368,6 +368,32 @@ a.kpi:hover { text-decoration: none; background: var(--card-hover); }
 .dues-list > .warn dt span { color: var(--warn); }
 .dues-list > .bad dt span, .dues-list > .over dt span, .dues-list > .over > dd:not(.extra) { color: var(--bad-text); }
 
+/* úřady: co podat a do kdy (jako Připomínky) */
+.task-list { list-style: none; margin: 0; padding: 0; }
+.task-list li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.task-list li:first-child { border-top: 0; padding-top: 2px; }
+.task-list .mark {
+  flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line-strong);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff;
+  align-self: flex-start; margin-top: 1px;
+}
+.task-list .warn .mark { border-color: var(--warn); }
+.task-list .bad .mark { border-color: var(--bad); }
+.task-list .done .mark { border-color: var(--good); background: var(--good); }
+.task-list .what { flex: 1; min-width: 220px; }
+.task-list .what > span:last-child { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.task-list .warn .what > span:last-child { color: var(--warn); }
+.task-list .bad .what > span:last-child { color: var(--bad-text); }
+.task-list .done .what b { color: var(--muted); font-weight: 500; }
+.task-list .do { display: flex; gap: 6px; margin-left: auto; }
+.tasks .hint { margin-top: 12px; }
+.alerts .notice > .btn { margin-left: auto; align-self: center; flex: none; }
+.done-box { margin-top: 20px; }
+.done-box h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+.done-list { list-style: none; margin: 0; padding: 0; }
+.done-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.done-list li:first-child { border-top: 0; }
+
 /* ---------- detail faktury ---------- */
 .detail { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .detail { grid-template-columns: 1fr; } }

@@ -1,0 +1,42 @@
+{
+  "updated": "2026-10-14",
+  "years": {
+    "2025": {
+      "social_limit": 111736,
+      "tax_rate": 15,
+      "tax_credit": 30840,
+      "student_credit": 0,
+      "health_rate": 13.5,
+      "social_rate": 29.2,
+      "social_base": 55,
+      "vat_limit": 2000000,
+      "vat_limit_now": 2536500,
+      "expense_caps": {"80": 1600000, "60": 1200000, "40": 800000}
+    },
+    "2026": {
+      "social_limit": 117521,
+      "tax_rate": 15,
+      "tax_credit": 30840,
+      "student_credit": 0,
+      "health_rate": 13.5,
+      "social_rate": 29.2,
+      "social_base": 55,
+      "vat_limit": 2000000,
+      "vat_limit_now": 2536500,
+      "expense_caps": {"80": 1600000, "60": 1200000, "40": 800000}
+    },
+    "2027": {
+      "note": "Rozhodná částka = 2,4 × průměrná mzda 51 663 Kč (nařízení vlády č. 177/2026 Sb.), zaokrouhleno nahoru. Vrací se sleva na studenta.",
+      "social_limit": 123992,
+      "tax_rate": 15,
+      "tax_credit": 30840,
+      "student_credit": 4020,
+      "health_rate": 13.5,
+      "social_rate": 29.2,
+      "social_base": 55,
+      "vat_limit": 2000000,
+      "vat_limit_now": 2536500,
+      "expense_caps": {"80": 1600000, "60": 1200000, "40": 800000}
+    }
+  }
+}
