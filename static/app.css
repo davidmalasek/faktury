@@ -76,7 +76,9 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; scroll-padding-top: 72px; }
+/* Místo pro posuvník je vždy, ať mají dlouhé i krátké stránky stejnou šířku. */
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 72px; scrollbar-gutter: stable; }
+@supports not (scrollbar-gutter: stable) { html { overflow-y: scroll; } }
 @media (pointer: fine) { html { overscroll-behavior: none; } }
 body {
   margin: 0;
