@@ -12,6 +12,9 @@ from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
+import mejvos
+
+APP_ID = "faktury"
 ROOT = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("FAKTURY_DATA") or ROOT / "data")  # jiná složka jen pro testy
 DATA_FILE = DATA / "faktury.json"
@@ -61,6 +64,10 @@ def init():
     ARCHIV.mkdir(exist_ok=True)
     if not DATA_FILE.exists():
         _save({"settings": dict(DEFAULT_SETTINGS), "contacts": [], "invoices": [], "incomes": []})
+    with _lock:  # kontakty ze starších verzí dostanou uid, ať je poznají i ostatní aplikace (MejvOS)
+        data = _load()
+        if _ensure_uids(data):
+            _save(data)
 
 
 def _load():
@@ -90,10 +97,16 @@ def open_data(write=False):
         data = _load()
         yield data
         if write:
-            daily_backup()
-            _save(data)
-            if ICLOUD:
-                _cloud_wake.set()
+            _commit(data)
+
+
+def _commit(data):
+    _ensure_uids(data)
+    daily_backup()
+    _save(data)
+    publish(data)
+    if ICLOUD:
+        _cloud_wake.set()
 
 
 def daily_backup():
@@ -112,6 +125,58 @@ def backup_now(label):
     target = ZALOHY / f"{label}-{datetime.now().strftime('%Y-%m-%d-%H%M%S')}.json"
     shutil.copyfile(DATA_FILE, target)
     return target
+
+
+# ---------- propojení s ostatními aplikacemi (MejvOS) ----------
+
+_peer_sig = None
+
+
+def _ensure_uids(data):
+    """Každý kontakt má uid – podle něj ho poznají i ostatní aplikace (třeba Hodinovka)."""
+    changed = False
+    for c in data["contacts"]:
+        if not c.get("uid"):
+            c["uid"] = mejvos.new_uid()
+            changed = True
+        if not c.get("updated_at"):
+            c["updated_at"] = c.get("created_at") or _now()
+            changed = True
+    return changed
+
+
+def settings_ready(data):
+    s = get_settings(data)
+    return bool(s["name"] and s["ico"] and s["account"])
+
+
+def publish(data):
+    """Zveřejní ostatním aplikacím kontakty a stav faktur, které z nich přišly."""
+    mejvos.publish_contacts(APP_ID, data["contacts"])
+    mejvos.publish(APP_ID, "invoices", [
+        {"app": inv["source"]["app"], "ref": inv["source"]["ref"], "id": inv["id"], "number": inv["number"],
+         "status": inv["status"], "issue_date": inv["issue_date"], "due_date": inv["due_date"],
+         "paid_date": inv["paid_date"], "total": inv["total"]}
+        for inv in data["invoices"] if (inv.get("source") or {}).get("ref")], ready=settings_ready(data))
+
+
+def sync_peers():
+    """Převezme novější údaje propojených kontaktů z ostatních aplikací (stejné uid).
+    Dívá se jen, když se od minule něco změnilo, takže je levné volat ho před každým požadavkem."""
+    global _peer_sig
+    sig = mejvos.signature("contacts", APP_ID)
+    if sig == _peer_sig:
+        return
+    with _lock:
+        data = _load()
+        if mejvos.merge_contacts(data["contacts"], mejvos.peer_contacts(APP_ID)):
+            _commit(data)
+    _peer_sig = sig
+
+
+def offered_contacts(data):
+    """Kontakty z ostatních aplikací, které ve Fakturách ještě nejsou – nabízí se u faktury i v kontaktech."""
+    return mejvos.offered_contacts(data["contacts"], mejvos.peer_contacts(APP_ID))
 
 
 # ---------- záloha do iCloud Drive ----------
@@ -276,15 +341,20 @@ def get_contact(data, cid):
 
 
 def save_contact(data, values, cid=None):
+    """Nový nebo upravený kontakt. Kontakt převzatý z jiné aplikace (třeba z Hodinovky) si nechá
+    její uid, takže zůstanou propojené."""
     clean = {k: _text(values.get(k)) for k in CONTACT_FIELDS}
     if not clean["name"]:
         raise ValueError("Vyplň název nebo jméno kontaktu.")
     if cid is None:
-        contact = {"id": _next_id(data["contacts"]), **clean, "created_at": _now()}
+        uid = _text(values.get("uid"))
+        if not uid or any(c.get("uid") == uid for c in data["contacts"]):
+            uid = mejvos.new_uid()
+        contact = {"id": _next_id(data["contacts"]), "uid": uid, **clean, "created_at": _now(), "updated_at": _now()}
         data["contacts"].append(contact)
         return contact
     contact = get_contact(data, cid)
-    contact.update(clean)
+    contact.update(clean, updated_at=_now())
     return contact
 
 
@@ -368,8 +438,11 @@ def save_invoice(data, values, iid=None):
     contact_id = values.get("contact_id") or None
     if contact_id is not None and not any(c["id"] == contact_id for c in data["contacts"]):
         contact_id = None  # kontakt mezitím někdo smazal
+    uid = _text(values.get("contact_uid"))  # kontakt z jiné aplikace (třeba klient z Hodinovky)
+    if contact_id is None and uid:
+        contact_id = next((c["id"] for c in data["contacts"] if c.get("uid") == uid), None)
     if contact_id is None and values.get("save_contact"):
-        contact_id = find_contact(data, customer) or save_contact(data, customer)["id"]
+        contact_id = find_contact(data, customer) or save_contact(data, {**customer, "uid": uid})["id"]
 
     if values.get("supplier"):
         supplier = {k: _text(values["supplier"].get(k)) for k in SUPPLIER_FIELDS}
@@ -407,6 +480,43 @@ def save_invoice(data, values, iid=None):
                "imported": bool(values.get("imported")), "pdf_file": None, "created_at": _now()}
     data["invoices"].append(invoice)
     return invoice
+
+
+def create_linked_invoice(data, values):
+    """Faktura, o kterou požádala jiná aplikace (třeba Hodinovka za odpracovaný čas).
+    Číslo, data a údaje dodavatele doplní Faktury samy. Stejný požadavek (source.app + source.ref)
+    poslaný znovu vrátí už vystavenou fakturu, takže nevznikne dvakrát.
+    Odběratel se propojí s kontaktem podle uid, IČO nebo názvu; když žádný není, uloží se jako nový."""
+    source = values.get("source") or {}
+    app, ref = _text(source.get("app")), _text(source.get("ref"))
+    if not app or not ref:
+        raise ValueError("Chybí, ze které aplikace faktura přišla.")
+    for inv in data["invoices"]:
+        if (inv.get("source") or {}).get("app") == app and inv["source"].get("ref") == ref:
+            return inv
+    given = values.get("customer") or {}
+    if not _text(given.get("name")):
+        raise ValueError("Vyplň odběratele.")
+    uid = _text(given.get("uid"))
+    contact = next((c for c in data["contacts"] if uid and c.get("uid") == uid), None)
+    if contact is None:
+        cid = find_contact(data, given)
+        contact = get_contact(data, cid) if cid else save_contact(data, given)
+    # Co aplikace poslala, platí (třeba fakturace na jinou firmu); chybějící údaje doplní kontakt.
+    customer = {k: _text(given.get(k)) or contact.get(k, "") for k in CUSTOMER_FIELDS}
+    issue = date.today().isoformat()
+    due = date.fromordinal(date.today().toordinal() + int(get_settings(data)["due_days"] or 0)).isoformat()
+    inv = save_invoice(data, {
+        "number": next_number(data),
+        "issue_date": _date(values.get("issue_date") or issue, "Datum vystavení"),
+        "due_date": _date(values.get("due_date") or due, "Datum splatnosti"),
+        "contact_id": contact["id"],
+        "customer": customer,
+        "items": values.get("items"),
+        "note": values.get("note"),
+    })
+    inv["source"] = {"app": app, "ref": ref, "name": _text(source.get("name")) or app, "link": _text(source.get("link"))}
+    return inv
 
 
 def set_status(data, iid, status, paid_date=None):

@@ -3,6 +3,7 @@
 // - vývojová (instalovat.sh): spouští Faktury ze složky projektu, cestu má v Info.plist (FakturyFolder),
 // - ke stažení z GitHubu: kód nese v Resources/app a při spuštění ho nakopíruje do Application Support,
 //   kde žijí i data a vlastní Python. Aktualizace pak mění jen tu složku, samotná aplikace zůstává.
+// Odkazy faktury://cesta (třeba z Hodinovky) otevřou okno na stránce #/cesta.
 import AppKit
 import WebKit
 
@@ -96,6 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
     var webView: WKWebView!
     var titleObservation: NSKeyValueObservation?
     var canClose = false  // neuložené změny už jsou potvrzené (nebo žádné nebyly)
+    var ready = false  // server běží a okno ukazuje appku
+    var pendingRoute: String?  // stránka z odkazu faktury://, která počká, až server naběhne
 
     // ---------- spuštění ----------
 
@@ -144,7 +147,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
                 if let error = error {
                     self.fail(error)
                 } else {
-                    self.webView.load(URLRequest(url: self.url))
+                    self.ready = true
+                    let route = self.pendingRoute ?? ""
+                    self.pendingRoute = nil
+                    self.webView.load(URLRequest(url: URL(string: self.url.absoluteString + "#/" + route)!))
                 }
             }
         }
@@ -163,6 +169,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
         } else {
             canClose = true
             NSApp.terminate(nil)
+        }
+    }
+
+    // ---------- odkazy faktury:// ----------
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let target = urls.first else { return }
+        // faktury://faktura/12 → #/faktura/12 (jen bezpečné znaky)
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-_")
+        let raw = (target.host ?? "") + target.path
+        let route = String(String.UnicodeScalarView(raw.unicodeScalars.filter { allowed.contains($0) }))
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        if ready {
+            webView.load(URLRequest(url: URL(string: url.absoluteString + "#/" + route)!))
+        } else {
+            pendingRoute = route
         }
     }
 
@@ -209,7 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate,
 
     // ---------- navigace ----------
 
-    /// Adresy appky. Ostatní odkazy se otevřou v prohlížeči.
+    /// Adresy appky. Ostatní odkazy (i hodinovka://) se otevřou v prohlížeči nebo v dané aplikaci.
     func isOwn(_ target: URL) -> Bool {
         switch target.scheme ?? "" {
         case "http", "https":

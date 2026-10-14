@@ -44,6 +44,17 @@ cat > "$CONTENTS/Info.plist" <<'EOF'
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>local.faktury</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>faktury</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.finance</string>
 	<key>LSMinimumSystemVersion</key>

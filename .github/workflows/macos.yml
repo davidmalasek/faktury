@@ -26,6 +26,7 @@ jobs:
           cat "$support/data/server.log" || true
           curl -sf http://localhost:8765/api/version
           pgrep -x Faktury
+          test -f "$HOME/Library/Application Support/MejvOS/apps/faktury.json"  # přihlásily se do MejvOS
           test ! -e "$support/python"  # Python na runneru je, nic se nestahovalo
           pkill -x Faktury
           kill "$(cat "$support/data/server.pid")"

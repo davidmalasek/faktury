@@ -16,6 +16,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import db  # noqa: E402
 import import_data  # noqa: E402
+import mejvos  # noqa: E402
 import server  # noqa: E402
 import update  # noqa: E402
 
@@ -36,7 +37,11 @@ class TempData(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self._orig = {k: getattr(db, k) for k in ("DATA", "DATA_FILE", "ARCHIV", "ZALOHY", "SMAZANE", "ICLOUD")}
+        self._mejvos = (mejvos.HOME, mejvos.ENABLED)
         db.ICLOUD = None  # testy se nikdy nesmí dotknout skutečného iCloudu
+        mejvos.HOME = root / "MejvOS"  # ani skutečného systému MejvOS
+        mejvos.ENABLED = False
+        db._peer_sig = None
         db.DATA = root
         db.DATA_FILE = root / "faktury.json"
         db.ARCHIV = root / "archiv"
@@ -47,6 +52,7 @@ class TempData(unittest.TestCase):
     def tearDown(self):
         for k, v in self._orig.items():
             setattr(db, k, v)
+        mejvos.HOME, mejvos.ENABLED = self._mejvos
         self.tmp.cleanup()
 
     def stored(self):
@@ -267,6 +273,106 @@ class DataTests(TempData):
         self.assertEqual(self.stored()["invoices"], [])
 
 
+class EcosystemTests(TempData):
+    """Propojení s ostatními aplikacemi systému MejvOS (třeba s Hodinovkou)."""
+
+    def linked(self, ref="r1", **customer):
+        return {"customer": {"name": "Kavárna", **customer},
+                "items": [{"description": "Web", "quantity": 2.5, "unit": "hod", "price": 800}],
+                "note": "Období: 1. 10. – 14. 10. 2026",
+                "source": {"app": "hodinovka", "name": "Hodinovka", "ref": ref, "link": f"hodinovka://vyuctovani/{ref}"}}
+
+    def peer(self, items):
+        launcher = Path(self.tmp.name) / "hodinovka/spustit.sh"
+        launcher.parent.mkdir(exist_ok=True)
+        launcher.write_text("exit 0")
+        mejvos._write_json(mejvos.HOME / "apps/hodinovka.json", {
+            "id": "hodinovka", "name": "Hodinovka", "api": "http://127.0.0.1:1/api/os", "provides": ["contacts"],
+            "launch": {"command": ["/bin/bash", str(launcher)]}})
+        mejvos._write_json(mejvos.HOME / "contacts/hodinovka.json", {"items": items})
+
+    def test_old_contacts_get_stable_uid(self):
+        db.DATA_FILE.write_text(json.dumps({"settings": {}, "invoices": [], "incomes": [], "contacts": [
+            {"id": 1, "name": "Stará firma", "ico": "", "created_at": "2025-01-01T10:00:00"}]}), encoding="utf-8")
+        db.init()
+        first = self.stored()["contacts"][0]
+        self.assertTrue(first["uid"])
+        self.assertEqual(first["updated_at"], "2025-01-01T10:00:00")
+        db.init()
+        self.assertEqual(self.stored()["contacts"][0]["uid"], first["uid"])
+        with db.open_data(True) as data:
+            c = db.save_contact(data, {"name": "Nová", "uid": first["uid"]})  # cizí uid se nezdvojí
+            self.assertNotEqual(c["uid"], first["uid"])
+
+    def test_linked_invoice_is_created_once(self):
+        with db.open_data(True) as data:
+            db.save_settings(data, {"due_days": "10"})
+            inv = db.create_linked_invoice(data, self.linked())
+            self.assertEqual((inv["number"], inv["total"], inv["status"]), (f"{YEAR}0001", 2000.0, "issued"))
+            self.assertEqual(inv["due_date"], date.fromordinal(date.today().toordinal() + 10).isoformat())
+            self.assertEqual(inv["source"]["link"], "hodinovka://vyuctovani/r1")
+            again = db.create_linked_invoice(data, self.linked())  # opakovaný požadavek
+            self.assertIs(again, inv)
+            self.assertEqual(len(data["invoices"]), 1)
+            other = db.create_linked_invoice(data, self.linked("r2"))
+            self.assertEqual(other["number"], f"{YEAR}0002")
+            with self.assertRaisesRegex(ValueError, "ze které aplikace"):
+                db.create_linked_invoice(data, {**self.linked(), "source": {}})
+
+    def test_linked_invoice_customer(self):
+        with db.open_data(True) as data:
+            known = db.save_contact(data, {"name": "Kavárna s.r.o.", "ico": "12345678", "street": "Mlýnská 1", "uid": "u1"})
+            # stejné uid: propojí se s kontaktem a chybějící údaje doplní, poslané údaje mají přednost
+            inv = db.create_linked_invoice(data, self.linked(uid="u1", name="Kavárna U Mlýna"))
+            self.assertEqual(inv["contact_id"], known["id"])
+            self.assertEqual((inv["customer"]["name"], inv["customer"]["ico"], inv["customer"]["street"]),
+                             ("Kavárna U Mlýna", "12345678", "Mlýnská 1"))
+            # fakturace na jinou firmu: nový kontakt se uloží i s uid z druhé aplikace
+            inv = db.create_linked_invoice(data, self.linked("r2", uid="u9", name="Holding a.s.", ico="87654321"))
+            holding = db.get_contact(data, inv["contact_id"])
+            self.assertEqual((holding["name"], holding["uid"]), ("Holding a.s.", "u9"))
+            # bez uid se najde podle IČO
+            inv = db.create_linked_invoice(data, self.linked("r3", name="Holding", ico="87654321"))
+            self.assertEqual(inv["contact_id"], holding["id"])
+            self.assertEqual(len(data["contacts"]), 2)
+
+    def test_publishes_contacts_and_linked_invoices(self):
+        mejvos.ENABLED = True
+        with db.open_data(True) as data:
+            db.save_invoice(data, invoice("1", save_contact=True))
+            inv = db.create_linked_invoice(data, self.linked())
+        contacts = json.loads((mejvos.HOME / "contacts/faktury.json").read_text(encoding="utf-8"))["items"]
+        self.assertEqual(sorted(c["name"] for c in contacts), ["Kavárna", "Odběratel s.r.o."])
+        published = json.loads((mejvos.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))
+        self.assertEqual(published["ready"], False)  # chybí údaje dodavatele
+        self.assertEqual([(i["ref"], i["status"]) for i in published["items"]], [("r1", "issued")])  # jen propojené
+        with db.open_data(True) as data:
+            db.set_status(data, inv["id"], "paid")
+        published = json.loads((mejvos.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))
+        self.assertEqual(published["items"][0]["status"], "paid")
+
+    def test_peer_contacts_are_offered_and_linked(self):
+        later = mejvos.now()
+        self.peer([{"uid": "h1", "name": "Studio Sova", "updated_at": later},
+                   {"uid": "h2", "name": "Odběratel s.r.o.", "updated_at": later}])
+        with db.open_data(True) as data:
+            db.save_contact(data, {"name": "Odběratel s.r.o."})
+            self.assertEqual([c["uid"] for c in db.offered_contacts(data)], ["h1"])
+            inv = db.save_invoice(data, invoice("1", customer={"name": "Studio Sova", "ico": "11223344"},
+                                                save_contact=True, contact_uid="h1"))
+            self.assertEqual(db.get_contact(data, inv["contact_id"])["uid"], "h1")
+            self.assertEqual(db.offered_contacts(data), [])
+
+    def test_newer_peer_data_updates_linked_contact(self):
+        with db.open_data(True) as data:
+            c = db.save_contact(data, {"name": "Studio Sova", "ico": "11223344", "uid": "h1"})
+            c["updated_at"] = "2026-01-01T10:00:00+01:00"
+        self.peer([{"uid": "h1", "name": "Studio Sova s.r.o.", "ico": "", "updated_at": "2026-02-01T10:00:00+01:00"}])
+        db.sync_peers()
+        stored = self.stored()["contacts"][0]
+        self.assertEqual((stored["name"], stored["ico"]), ("Studio Sova s.r.o.", "11223344"))  # prázdné nic nesmaže
+
+
 def release_zip(version, files, prefix=None):
     """Archiv verze ve tvaru, v jakém ho dává GitHub (vše ve složce faktury-<verze>/)."""
     buf = BytesIO()
@@ -414,6 +520,18 @@ class ServerTests(TempData):
             status, body = self.call("GET", "/api/update")
         self.assertEqual((status, body["available"]), (200, False))
         status, _ = self.call("POST", "/api/update", {}, headers={"Origin": "https://evil.example"})
+        self.assertEqual(status, 403)
+
+    def test_os_api_for_other_apps(self):
+        status, info = self.call("GET", "/api/os")
+        self.assertEqual((status, info["provides"], info["ready"]), (200, ["contacts", "invoices"], False))
+        body = EcosystemTests.linked(self, "x1")
+        status, created = self.call("POST", "/api/os/invoices", body)
+        self.assertEqual((status, created["number"], created["total"]), (201, f"{YEAR}0001", 2000.0))
+        self.assertEqual(self.call("POST", "/api/os/invoices", body)[1]["id"], created["id"])
+        self.assertEqual([c["name"] for c in self.call("GET", "/api/os/contacts")[1]], ["Kavárna"])
+        self.assertEqual(self.call("GET", "/api/offered")[1], [])
+        status, _ = self.call("POST", "/api/os/invoices", body, headers={"Origin": "https://evil.example"})
         self.assertEqual(status, 403)
 
     def test_static_files_cannot_escape(self):

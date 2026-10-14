@@ -72,7 +72,7 @@ outdated() {
   local version
   version=$(curl -s --max-time 1 "$URL/api/version" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p')
   [ "$version" != "$(tr -d '[:space:]' < VERSION)" ] && return 0
-  [ -f data/server.pid ] && { [ data/server.pid -ot server.py ] || [ data/server.pid -ot db.py ] || [ data/server.pid -ot update.py ]; }
+  [ -f data/server.pid ] && { [ data/server.pid -ot server.py ] || [ data/server.pid -ot db.py ] || [ data/server.pid -ot update.py ] || [ data/server.pid -ot mejvos.py ]; }
 }
 if running && outdated; then
   kill "$(cat data/server.pid)" 2>/dev/null

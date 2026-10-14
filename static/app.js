@@ -136,6 +136,7 @@ const statusLabel = inv => {
   return `<span class="status ${cls}">${text}</span>`;
 };
 const contactLabel = c => (c.ico ? `${c.name} (IČO ${c.ico})` : c.name);
+const offeredLabel = c => `${contactLabel(c)} — ${c.app_name}`; // kontakt z jiné aplikace (Hodinovka…)
 const pickCustomer = c => Object.fromEntries(CUSTOMER_FIELDS.map(k => [k, c[k] || '']));
 const sameData = (a, b, keys) => keys.every(k => String(a?.[k] ?? '') === String(b?.[k] ?? ''));
 const addressLines = p => [p.street, [p.zip, p.city].filter(Boolean).join(' '), p.country].filter(Boolean);
@@ -695,6 +696,7 @@ async function viewInvoice(params, id) {
               <dt>Vystaveno</dt><dd>${Fmt.date(inv.issue_date)}</dd>
               <dt>Splatnost</dt><dd>${Fmt.date(inv.due_date)}</dd>
               <dt>Variabilní symbol</dt><dd>${esc(inv.vs)}</dd>
+              ${inv.source ? `<dt>Vytvořeno v aplikaci</dt><dd>${inv.source.link ? `<a href="${esc(inv.source.link)}">${esc(inv.source.name)}</a>` : esc(inv.source.name)}</dd>` : ''}
               ${inv.status === 'paid' ? `<dt><label for="paid-date" style="font-weight:400">Zaplaceno dne</label></dt><dd><input type="date" id="paid-date" value="${esc(inv.paid_date)}"></dd>` : ''}
             </dl>
           </div>
@@ -728,7 +730,8 @@ async function viewInvoice(params, id) {
       restore: () => setStatus('issued'),
       reveal: () => api(`invoices/${inv.id}/reveal`, { method: 'POST', body: {} }),
       delete: async () => {
-        if (!confirm(`Opravdu smazat fakturu ${inv.number}?\n\nMaž jen omylem vytvořenou fakturu – jinak vznikne v číselné řadě díra. Na zrušení platné faktury použij Stornovat.`)) return;
+        const linked = inv.source ? ` ${inv.source.name} pak nabídne vrátit odpracovaný čas mezi nevyfakturovaný.` : '';
+        if (!confirm(`Opravdu smazat fakturu ${inv.number}?\n\nMaž jen omylem vytvořenou fakturu – jinak vznikne v číselné řadě díra. Na zrušení platné faktury použij Stornovat.${linked}`)) return;
         await api('invoices/' + inv.id, { method: 'DELETE' });
         toast('Faktura smazána');
         location.hash = '#/faktury';
@@ -746,7 +749,8 @@ async function viewInvoice(params, id) {
 // ---------- faktura: formulář ----------
 
 async function viewInvoiceForm(params, id) {
-  const [settings, contacts, invoices, incomes] = await Promise.all([api('settings'), api('contacts'), api('invoices'), api('incomes')]);
+  const [settings, contacts, invoices, incomes, offered] = await Promise.all([
+    api('settings'), api('contacts'), api('invoices'), api('incomes'), api('offered').catch(() => [])]);
   contacts.sort(byName);
   let inv;
   if (id) {
@@ -767,16 +771,17 @@ async function viewInvoiceForm(params, id) {
       note: source?.note ?? '',
     };
   }
-  return () => renderInvoiceForm(inv, id, settings, contacts, { invoices: invoices.filter(i => i.id !== inv.id), incomes });
+  return () => renderInvoiceForm(inv, id, settings, contacts, { invoices: invoices.filter(i => i.id !== inv.id), incomes }, offered);
 }
 
-/** others = ostatní faktury a příjmy pro varování u limitů */
-function renderInvoiceForm(inv, id, settings, contacts, others) {
+/** others = ostatní faktury a příjmy pro varování u limitů, offered = kontakty z ostatních aplikací */
+function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
   setTitle(id ? `Upravit fakturu ${inv.number}` : 'Nová faktura');
   const state = {
     contactId: inv.contact_id,
     customer: inv.customer,
     isNew: false,
+    peer: null, // kontakt převzatý z jiné aplikace (třeba klient z Hodinovky)
     items: inv.items.map(it => ({ ...it })),
   };
   let dirty = false;
@@ -797,7 +802,7 @@ function renderInvoiceForm(inv, id, settings, contacts, others) {
         <h2>Odběratel</h2>
         <div class="customer-pick">
           <input id="contact-search" list="contact-list" placeholder="Vyber z kontaktů – začni psát název nebo IČO…" aria-label="Vyhledat odběratele v kontaktech">
-          <datalist id="contact-list">${contacts.map(c => `<option value="${esc(contactLabel(c))}"></option>`).join('')}</datalist>
+          <datalist id="contact-list">${contacts.map(c => `<option value="${esc(contactLabel(c))}"></option>`).join('')}${offered.map(c => `<option value="${esc(offeredLabel(c))}"></option>`).join('')}</datalist>
           <button type="button" class="btn" id="new-customer">Nový odběratel</button>
         </div>
         <div id="customer-box"></div>
@@ -854,7 +859,7 @@ function renderInvoiceForm(inv, id, settings, contacts, others) {
           ${field('E-mail', 'data-c="email" spellcheck="false"', c.email, { cls: 'c2', type: 'email' })}
           ${field('Stát (jen pokud není ČR)', 'data-c="country"', c.country, { cls: 'c2' })}
         </div>
-        <p class="hint">Nový odběratel se zároveň uloží do kontaktů.</p>`;
+        <p class="hint">${state.peer ? `Klient z aplikace ${esc(state.peer.app_name)} – doplň, co chybí (třeba IČO z ARES). Uloží se do kontaktů a zůstane s ním propojený.` : 'Nový odběratel se zároveň uloží do kontaktů.'}</p>`;
       $$('[data-c]', box).forEach(el => (el.oninput = () => (state.customer[el.dataset.c] = el.value)));
       $('[data-ares]', box).onclick = e => attempt(async () => {
         Object.assign(state.customer, await loadAres(state.customer.ico));
@@ -885,13 +890,20 @@ function renderInvoiceForm(inv, id, settings, contacts, others) {
   const search = $('#contact-search');
   search.addEventListener('input', () => {
     const c = contacts.find(x => contactLabel(x) === search.value);
+    const peer = !c && offered.find(x => offeredLabel(x) === search.value);
+    if (peer) {
+      Object.assign(state, { contactId: null, customer: pickCustomer(peer), isNew: true, peer });
+      search.value = '';
+      markDirty();
+      return drawCustomer();
+    }
     if (!c) return;
-    Object.assign(state, { contactId: c.id, customer: pickCustomer(c), isNew: false });
+    Object.assign(state, { contactId: c.id, customer: pickCustomer(c), isNew: false, peer: null });
     search.value = '';
     drawCustomer();
   });
   $('#new-customer').onclick = () => {
-    Object.assign(state, { contactId: null, customer: pickCustomer({}), isNew: true });
+    Object.assign(state, { contactId: null, customer: pickCustomer({}), isNew: true, peer: null });
     markDirty();
     drawCustomer();
     $('[data-c="name"]', box).focus();
@@ -991,6 +1003,7 @@ function renderInvoiceForm(inv, id, settings, contacts, others) {
         contact_id: state.contactId,
         customer: state.customer,
         save_contact: state.isNew,
+        contact_uid: state.peer?.uid || null,
         items: items.map(it => ({ ...it, quantity: parseNum(it.quantity), price: parseNum(it.price) })),
         note: els.note.value,
         refresh_supplier: Boolean(els.refresh_supplier?.checked),
@@ -1097,13 +1110,27 @@ async function viewIncomeForm(params, id) {
 // ---------- kontakty ----------
 
 async function viewContacts(params) {
-  const contacts = (await api('contacts')).sort(byName);
+  const [contacts, offered] = await Promise.all([api('contacts'), api('offered').catch(() => [])]);
+  contacts.sort(byName);
   return () => {
     setTitle('Kontakty');
     app.innerHTML = `
       <div class="page-head"><h1>Kontakty</h1><a class="btn primary" href="#/kontakt/novy">Nový kontakt</a></div>
       <div class="toolbar"><input id="search" type="search" placeholder="Hledat…" aria-label="Hledat název, IČO nebo město" autocomplete="off" spellcheck="false"></div>
-      <div class="table-card" id="list"></div>`;
+      <div class="table-card" id="list"></div>
+      ${offered.length ? `
+        <section class="table-card" style="margin-top:24px">
+          <div class="card-head"><h2>Klienti z ostatních aplikací</h2><span class="muted">nabízí se i u nové faktury</span></div>
+          <div class="table-scroll"><table class="list">
+            <tbody>${offered.slice().sort(byName).map(c => `
+              <tr data-href="#/kontakt/novy?z=${encodeURIComponent(c.uid)}">
+                <td class="strong">${esc(c.name)}<div class="muted" style="font-weight:400;font-size:13px">${esc([c.ico && `IČO ${c.ico}`, c.city].filter(Boolean).join(' · ') || 'zatím bez IČO a adresy')}</div></td>
+                <td class="hide-sm muted">${esc(c.app_name)}</td>
+                <td class="num"><a class="btn" href="#/kontakt/novy?z=${encodeURIComponent(c.uid)}">Přidat do kontaktů</a></td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </section>` : ''}`;
     const draw = q => {
       q = q.toLowerCase();
       const rows = contacts.filter(c => !q || [c.name, c.ico, c.city, c.email].some(v => (v || '').toLowerCase().includes(q)));
@@ -1125,6 +1152,10 @@ async function viewContacts(params) {
 
 async function viewContactForm(params, id) {
   const [contact, invoices] = id ? await Promise.all([api('contacts/' + id), api('invoices')]) : [{}, []];
+  if (!id && params.get('z')) {  // klient z jiné aplikace: předvyplní se a zůstane s ní propojený (stejné uid)
+    const peer = (await api('offered').catch(() => [])).find(c => c.uid === params.get('z'));
+    if (peer) Object.assign(contact, pickCustomer(peer), { uid: peer.uid, app_name: peer.app_name });
+  }
   const theirs = invoices.filter(i => i.contact_id === id);
   return () => {
     setTitle(id ? contact.name : 'Nový kontakt');
@@ -1148,6 +1179,7 @@ async function viewContactForm(params, id) {
           ${field('Stát (jen pokud není ČR)', 'name="country"', contact.country, { cls: 'c2' })}
           <label class="c6">Poznámka (jen pro tebe, na faktuře není)<textarea name="note" rows="2">${esc(contact.note)}</textarea></label>
         </div>
+        ${!id && contact.uid ? `<input type="hidden" name="uid" value="${esc(contact.uid)}"><p class="hint">Klient z aplikace ${esc(contact.app_name)}. Zůstane s ní propojený, takže se změny údajů přenesou i tam.</p>` : ''}
         <div class="form-actions" style="margin-top:20px">
           ${id ? '<button type="button" class="btn ghost danger" id="delete" style="margin-right:auto">Smazat kontakt…</button>' : ''}
           <button type="submit" class="btn primary">Uložit</button>
@@ -1190,7 +1222,7 @@ async function viewContactForm(params, id) {
 // ---------- nastavení ----------
 
 async function viewSettings() {
-  const [s, cloud] = await Promise.all([api('settings'), api('zaloha')]);
+  const [s, cloud, peers] = await Promise.all([api('settings'), api('zaloha'), api('peers').catch(() => null)]);
   return () => {
     setTitle('Nastavení');
     let dirty = false;
@@ -1254,11 +1286,18 @@ async function viewSettings() {
         ${cloudStatus(cloud)}
         <a class="btn" href="/api/export" download>Stáhnout zálohu dat</a>
       </section>
+      ${peers ? peersCard(peers) : ''}
       <section class="card">
         <h2>Aktualizace</h2>
         <p class="hint" id="version-info" style="margin:0">Zjišťuji verzi…</p>
       </section>`;
     showVersion();
+    $$('[data-install]').forEach(b => (b.onclick = () => attempt(async () => {
+      toast('Stahuji a instaluji… může to minutu trvat');
+      await api(`peers/${b.dataset.install}/install`, { method: 'POST', body: {} });
+      toast('Nainstalováno a propojeno');
+      router(false);
+    }, b)));
 
     const form = $('#settings-form');
     form.addEventListener('input', () => (dirty = true));
@@ -1324,6 +1363,26 @@ async function viewSettings() {
       $('#preview-box').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     }, e.currentTarget);
   };
+}
+
+/** Ostatní aplikace systému (MejvOS): propojené, nainstalované, nebo ke stažení jedním kliknutím. */
+function peersCard(peers) {
+  return `
+    <section class="card">
+      <h2>Propojené aplikace</h2>
+      <p style="margin-top:0">Faktury patří do systému <b>${esc(peers.system)}</b>. Aplikace na tomhle Macu se najdou samy a sdílí kontakty – třeba z Hodinovky jde odpracovaný čas vyfakturovat jedním kliknutím.</p>
+      <div class="apps">${peers.apps.map(a => `
+        <div class="app-row">
+          <span class="app-icon ${esc(a.id)}" aria-hidden="true">${esc(a.name.charAt(0))}</span>
+          <span class="who"><b>${esc(a.name)}</b><span>${esc(a.description)}</span></span>
+          ${a.state === 'running' || a.state === 'ready'
+            ? `<span class="state ok">✓ Propojeno${a.version ? ` · verze ${esc(a.version)}` : ''}</span><a class="btn" href="${esc(a.scheme || a.id)}://">Otevřít</a>`
+            : a.state === 'installed'
+              ? `<span class="state muted">Propojí se po prvním otevření</span><a class="btn" href="${esc(a.id)}://">Otevřít</a>`
+              : `<a class="btn ghost" href="${esc(a.web)}" target="_blank" rel="noopener">Co to je</a><button type="button" class="btn primary" data-install="${esc(a.id)}">Nainstalovat</button>`}
+        </div>`).join('')}
+      </div>
+    </section>`;
 }
 
 function cloudStatus(c) {

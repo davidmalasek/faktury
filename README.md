@@ -38,6 +38,17 @@ Hodí se i při podnikání během studia nebo vedle zaměstnání (vedlejší �
 
 Faktury jsou v korunách a appka je česky.
 
+## Propojení s Hodinovkou
+
+Faktury a [Hodinovka](https://github.com/davidmalasek/hodinovka) (měření odpracovaného času) patří do jednoho systému aplikací (pracovně **MejvOS**). Když jsou na Macu obě, najdou se samy a nic se nenastavuje:
+
+- **Kontakty se sdílí.** Klient z Hodinovky se nabídne u nové faktury (a v Kontaktech) a kontakt z Faktur se nabídne v Hodinovce. Jakmile ho jednou použiješ, zůstanou propojené a změny údajů se přenesou do druhé aplikace. Klient z Hodinovky nemusí mít IČO, doplníš ho tady (třeba z ARES).
+- **Faktura za odpracovaný čas.** V Hodinovce vybereš záznamy a dáš Vyfakturovat. Tady se vytvoří faktura s položkami, hodinami a cenami, číslo, splatnost a tvoje údaje doplní Faktury samy. U faktury je odkaz zpátky do Hodinovky.
+- **Stav se vrací.** Hodinovka vidí, jestli je faktura zaplacená nebo stornovaná. Když fakturu smažeš, nabídne vrátit čas mezi nevyfakturovaný.
+- Hodinovku nainstaluješ jedním kliknutím v **Nastavení → Propojené aplikace**.
+
+Je jedno, kterou aplikaci si stáhneš dřív. Obě v sobě nesou to, co k propojení potřebují. Jak to funguje uvnitř, popisuje [docs/mejvos.md](docs/mejvos.md).
+
 ## Požadavky
 
 - **Mac s macOS 12 nebo novějším** (Apple Silicon i Intel). Okno aplikace, záloha do iCloudu i tlačítko „Ukázat ve Finderu“ jsou psané pro Mac.
@@ -73,7 +84,7 @@ Výjimečně se změní i okno aplikace. Pak se stáhne nová Faktury.app a appk
 ## Soukromí
 
 Appka nemá žádný vlastní server ani účet a nic nikam neposílá. Data leží jen ve složce `data` u tebe na disku a v kopii na tvém iCloud Drive.
-Ven jde jen dotaz do veřejného registru ARES, když načítáš firmu podle IČO, a dotaz na GitHub, jestli nevyšla nová verze.
+Ven jde jen dotaz do veřejného registru ARES, když načítáš firmu podle IČO, a dotaz na GitHub, jestli nevyšla nová verze. S Hodinovkou si data předávají jen tady na Macu.
 Appka poslouchá jen na `127.0.0.1`, takže se k ní nedostane nikdo jiný ze sítě.
 
 ## Kde jsou data
@@ -87,6 +98,7 @@ Data jsou ve složce `~/Library/Application Support/Faktury/data` (ve vývojové
 | `data/zalohy/` | automatická záloha před první změnou každého dne (30 dní) a před každým importem a aktualizací |
 | `data/smazane/` | PDF smazaných faktur a dokladů (nic se nemaže natrvalo) |
 | iCloud Drive → `Faktury záloha` | kopie všeho výše, aktualizuje se po každé změně |
+| `~/Library/Application Support/MejvOS` | co si Faktury a Hodinovka navzájem ukazují (kontakty, stav faktur z Hodinovky) |
 
 Složka `data` se do gitu záměrně neukládá, protože obsahuje osobní údaje klientů.
 Stav zálohy do iCloudu je vidět v Nastavení. Z iCloudu se nic nemaže, kromě denních záloh starších než 30 dní.
@@ -135,7 +147,9 @@ python3 import_data.py soubor.json --zkouska   # import starých dat (formát po
 
 Bez závislostí: backend na standardní knihovně Pythonu a frontend v čistém JavaScriptu.
 PDF vytváří knihovna pdfmake, přibalená ve `static/vendor`.
-Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`.
+Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`, a do systému MejvOS se přihlásí, jen když nastavíš `MEJVOS_DIR`.
+Vzhled i technika jsou společné pro všechny aplikace systému a popisuje je [docs/styl.md](docs/styl.md).
+Propojení s ostatními aplikacemi je v `mejvos.py`. Ten soubor je stejný ve všech aplikacích systému, takže když ho měníš, změň ho i v Hodinovce.
 
 Okno aplikace je v `macos/Faktury.swift` (AppKit a WebKit) a sestavuje ho `macos/sestavit.sh`, a to ve dvou podobách.
 Vývojová podoba (`instalovat.sh`) spouští Faktury ze složky projektu. Podoba ke stažení (`Faktury.zip` z GitHub Actions) nese kód v sobě a při spuštění ho nakopíruje do `~/Library/Application Support/Faktury`.

@@ -425,6 +425,18 @@ dialog .choices label { display: flex; align-items: center; gap: 10px; min-heigh
 dialog .choices label:hover { background: var(--fill); }
 dialog .choices input[type="date"] { width: auto; margin: 0 0 0 auto; min-height: 32px; padding: 4px 8px; }
 
+/* ---------- propojené aplikace (MejvOS) ---------- */
+.apps { display: grid; gap: 2px; margin: 4px 0 0; }
+.app-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.app-row:first-child { border-top: 0; }
+.app-row .app-icon { width: 36px; height: 36px; border-radius: 9px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; background: linear-gradient(#3a9bff, #0066dd); }
+.app-row .app-icon.hodinovka { background: linear-gradient(#ffb340, #ff8000); }
+.app-row .who { flex: 1; min-width: 180px; }
+.app-row .who b { display: block; }
+.app-row .who span { font-size: 13px; color: var(--muted); }
+.app-row .state { font-size: 13px; white-space: nowrap; }
+.app-row .state.ok { color: var(--good-text); }
+
 /* ---------- aktualizace ---------- */
 .update-bar { max-width: 1120px; margin: 20px auto -16px; padding: 0 24px; }
 .update-bar .notice { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin: 0; }
