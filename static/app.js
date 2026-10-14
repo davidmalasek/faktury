@@ -144,6 +144,8 @@ const statusLabel = inv => {
 };
 const contactLabel = c => (c.ico ? `${c.name} (IČO ${c.ico})` : c.name);
 const offeredLabel = c => `${contactLabel(c)} — ${c.app_name}`; // kontakt z jiné aplikace (Hodinovka…)
+// Skutečná ikona aplikace systému. Ikony všech aplikací jsou v static/mejvos (v každé aplikaci stejné).
+const appIcon = (id, size = 16) => `<img class="app-icon" src="mejvos/${esc(encodeURIComponent(id))}.svg" alt="" width="${size}" height="${size}">`;
 const pickCustomer = c => Object.fromEntries(CUSTOMER_FIELDS.map(k => [k, c[k] || '']));
 const sameData = (a, b, keys) => keys.every(k => String(a?.[k] ?? '') === String(b?.[k] ?? ''));
 const addressLines = p => [p.street, [p.zip, p.city].filter(Boolean).join(' '), p.country].filter(Boolean);
@@ -727,7 +729,7 @@ async function viewInvoice(params, id) {
               <dt>Vystaveno</dt><dd>${Fmt.date(inv.issue_date)}</dd>
               <dt>Splatnost</dt><dd>${Fmt.date(inv.due_date)}</dd>
               <dt>Variabilní symbol</dt><dd>${esc(inv.vs)}</dd>
-              ${inv.source ? `<dt>Vytvořeno v aplikaci</dt><dd>${inv.source.link ? `<a href="${esc(inv.source.link)}">${esc(inv.source.name)}</a>` : esc(inv.source.name)}</dd>` : ''}
+              ${inv.source ? `<dt>Vytvořeno v aplikaci</dt><dd><span class="linked">${appIcon(inv.source.app)}${inv.source.link ? `<a href="${esc(inv.source.link)}">${esc(inv.source.name)}</a>` : esc(inv.source.name)}</span></dd>` : ''}
               ${inv.status === 'paid' ? `<dt><label for="paid-date" style="font-weight:400">Zaplaceno dne</label></dt><dd><input type="date" id="paid-date" value="${esc(inv.paid_date)}"></dd>` : ''}
             </dl>
           </div>
@@ -1154,7 +1156,7 @@ async function viewContacts(params) {
             <tbody>${offered.slice().sort(byName).map(c => `
               <tr data-href="#/kontakt/novy?z=${encodeURIComponent(c.uid)}">
                 <td class="strong">${esc(c.name)}<div class="muted" style="font-weight:400;font-size:13px">${esc([c.ico && `IČO ${c.ico}`, c.city].filter(Boolean).join(' · ') || 'zatím bez IČO a adresy')}</div></td>
-                <td class="hide-sm muted">${esc(c.app_name)}</td>
+                <td class="hide-sm"><span class="linked">${appIcon(c.app)}${esc(c.app_name)}</span></td>
                 <td class="num"><a class="btn" href="#/kontakt/novy?z=${encodeURIComponent(c.uid)}">Přidat do kontaktů</a></td>
               </tr>`).join('')}
             </tbody>
@@ -1406,7 +1408,7 @@ function peersCard(peers) {
       <p style="margin-top:0">Faktury patří do systému <b>${esc(peers.system)}</b>. Aplikace na tomhle Macu se najdou samy a sdílí kontakty – třeba z Hodinovky jde odpracovaný čas vyfakturovat jedním kliknutím.</p>
       <div class="apps">${peers.apps.map(a => `
         <div class="app-row">
-          <span class="app-icon ${esc(a.id)}" aria-hidden="true">${esc(a.name.charAt(0))}</span>
+          ${appIcon(a.id, 36)}
           <span class="who"><b>${esc(a.name)}</b><span>${esc(a.description)}</span></span>
           ${a.state === 'running' || a.state === 'ready'
             ? `<span class="state ok">✓ Propojeno${a.version ? ` · verze ${esc(a.version)}` : ''}</span><a class="btn" href="${esc(a.scheme || a.id)}://">Otevřít</a>`

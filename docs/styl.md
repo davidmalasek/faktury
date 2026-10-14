@@ -34,6 +34,7 @@ Všechno je v `static/app.css`. Novou aplikaci začni kopií z Faktur a jen při
 **Pohyb:** krátké a tlumené (`cubic-bezier(0.2, 0.8, 0.2, 1)`, 0,15–0,3 s): stránka najede o 6 px, dialog se zvětší z 96 %, sloupce grafu vyrostou. Při `prefers-reduced-motion` se nehýbe nic.
 
 **Ikona aplikace:** zaoblený čtverec s jemným svislým přechodem a bílým symbolem uprostřed, mřížka macOS (čtverec 824 px v plátně 1024 px, stín pod ním). Každá aplikace má svou barvu: Faktury modrá (`#3a9bff → #0066dd`), Hodinovka oranžová (`#ffb340 → #ff7a00`).
+Ikona pro web je `static/icon.svg`. Ikony všech aplikací systému jsou v `static/mejvos/<id>.svg` a ukazují se tam, kde je řeč o jiné aplikaci (Nastavení → Propojené aplikace, štítek „propojeno“). Nikdy je nenahrazuj barevným čtverečkem s písmenem.
 
 ## Prvky
 

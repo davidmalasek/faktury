@@ -429,13 +429,17 @@ dialog .choices input[type="date"] { width: auto; margin: 0 0 0 auto; min-height
 .apps { display: grid; gap: 2px; margin: 4px 0 0; }
 .app-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .app-row:first-child { border-top: 0; }
-.app-row .app-icon { width: 36px; height: 36px; border-radius: 9px; flex: none; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; background: linear-gradient(#3a9bff, #0066dd); }
-.app-row .app-icon.hodinovka { background: linear-gradient(#ffb340, #ff8000); }
+.app-icon { flex: none; display: inline-block; vertical-align: middle; }
+.app-row .app-icon { filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.14)); }
 .app-row .who { flex: 1; min-width: 180px; }
 .app-row .who b { display: block; }
 .app-row .who span { font-size: 13px; color: var(--muted); }
 .app-row .state { font-size: 13px; white-space: nowrap; }
 .app-row .state.ok { color: var(--good-text); }
+
+/* odkazy na jinou aplikaci */
+.linked { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+dd .linked { font-size: inherit; color: inherit; }
 
 /* ---------- aktualizace ---------- */
 .update-bar { max-width: 1120px; margin: 20px auto -16px; padding: 0 24px; }

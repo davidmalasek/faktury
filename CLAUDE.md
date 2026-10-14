@@ -3,7 +3,7 @@
 Fakturace pro živnostníky (neplátce DPH) na Macu. Patří do systému aplikací MejvOS spolu s Hodinovkou (github.com/davidmalasek/hodinovka).
 
 - Vzhled a technika podle `docs/styl.md`. Platí i pro každou další aplikaci systému, ať vypadají a fungují stejně.
-- Propojení aplikací podle `docs/mejvos.md`. Soubory `mejvos.py`, `docs/mejvos.md` a `docs/styl.md` jsou stejné ve všech aplikacích: když je měníš, změň je všude.
+- Propojení aplikací podle `docs/mejvos.md`. Soubory `mejvos.py`, `docs/mejvos.md`, `docs/styl.md` a ikony aplikací ve `static/mejvos/` jsou stejné ve všech aplikacích: když je měníš, změň je všude.
 - Bez závislostí: Python 3.9+ jen se standardní knihovnou, čistý JavaScript bez buildu (pdfmake je přibalený). Testy `python3 -m unittest discover tests` musí projít i na Pythonu 3.9.
 - Texty v aplikaci i komentáře v kódu česky, uživateli se tyká.
 - Okno pro macOS (`macos/Faktury.swift`) jde zkompilovat jen na Macu, ověřuje ho GitHub Actions.

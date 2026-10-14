@@ -291,6 +291,12 @@ class EcosystemTests(TempData):
             "launch": {"command": ["/bin/bash", str(launcher)]}})
         mejvos._write_json(mejvos.HOME / "contacts/hodinovka.json", {"items": items})
 
+    def test_app_icons(self):
+        # Nastavení ukazuje skutečné ikony aplikací: složka je v každé aplikaci stejná a zná celý katalog
+        icons = db.ROOT / "static/mejvos"
+        self.assertEqual(sorted(p.stem for p in icons.glob("*.svg")), sorted(mejvos.CATALOG))
+        self.assertEqual((icons / f"{db.APP_ID}.svg").read_bytes(), (db.ROOT / "static/icon.svg").read_bytes())
+
     def test_old_contacts_get_stable_uid(self):
         db.DATA_FILE.write_text(json.dumps({"settings": {}, "invoices": [], "incomes": [], "contacts": [
             {"id": 1, "name": "Stará firma", "ico": "", "created_at": "2025-01-01T10:00:00"}]}), encoding="utf-8")

@@ -130,6 +130,7 @@ Když je aplikace nainstalovaná, ale ještě nikdy neběžela (manifest chybí)
 ## Nová aplikace
 
 1. Zkopíruj `mejvos.py` (stejný soubor jako ve Fakturách a v Hodinovce) a přidej aplikaci do `CATALOG`, a to ve všech aplikacích.
+   Stejně tak složku `static/mejvos/` s ikonami: přidej do ní ikonu nové aplikace (kopii jejího `static/icon.svg`) a zkopíruj ji do všech aplikací.
 2. Server při spuštění zavolá `mejvos.announce(...)`, po každém uložení `mejvos.publish_contacts(...)` a před každým požadavkem levné srovnání kontaktů (`merge_contacts` při změně `signature`).
 3. Zveřejněné seznamy čti přes `mejvos.read(kind)`, volání přes `mejvos.call(app, …)`.
 4. Vyber volný port (Faktury 8765, Hodinovka 8766) a URL schéma podle `id`.
