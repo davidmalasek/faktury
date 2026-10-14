@@ -22,14 +22,22 @@ jobs:
           support="$HOME/Library/Application Support/Faktury"
           ditto -x -k "$RUNNER_TEMP/Faktury.zip" "$RUNNER_TEMP/stazeno"
           open "$RUNNER_TEMP/stazeno/Faktury.app"
-          for _ in $(seq 1 180); do curl -sf -o /dev/null http://localhost:8765/api/version && break; sleep 1; done
+          for _ in $(seq 1 60); do curl -sf -o /dev/null http://localhost:8765/api/version && break; sleep 1; done
           cat "$support/data/server.log" || true
           curl -sf http://localhost:8765/api/version
           pgrep -x Faktury
-          # stažený Python a certifikáty (ARES a aktualizace jdou přes HTTPS)
+          test ! -e "$support/python"  # Python na runneru je, nic se nestahovalo
+          pkill -x Faktury
+          kill "$(cat "$support/data/server.pid")"
+      - name: Zkouška stažení vlastního Pythonu (Mac bez Pythonu)
+        run: |
+          support="$HOME/Library/Application Support/Faktury"
+          FAKTURY_APP=zkouska FAKTURY_STAHNOUT_PYTHON=1 bash "$support/spustit.sh"
+          curl -sf http://localhost:8765/api/version
+          ps -o command= -p "$(cat "$support/data/server.pid")" | grep -F "python/bin/python3 server.py"
+          # certifikáty (ARES a aktualizace jdou přes HTTPS)
           SSL_CERT_FILE="$support/python/cacert.pem" "$support/python/bin/python3" -c \
             "import urllib.request; urllib.request.urlopen('https://github.com', timeout=20); print('HTTPS v pořádku')"
-          pkill -x Faktury
           kill "$(cat "$support/data/server.pid")"
       - uses: actions/upload-artifact@v4
         with:

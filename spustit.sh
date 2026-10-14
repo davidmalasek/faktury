@@ -1,7 +1,7 @@
 #!/bin/bash
 # Spustí server Faktur na pozadí, pokud ještě neběží. Volá ho Faktury.app při každém otevření.
-# Aplikace stažená z GitHubu (proměnná FAKTURY_APP) si při prvním spuštění stáhne vlastní Python
-# do složky python/. Vývojová instalace používá Python ze systému nebo z Homebrew.
+# Použije Python 3.9+, který už na Macu je (Homebrew, vývojářské nástroje od Applu). Když žádný není,
+# aplikace stažená z GitHubu (proměnná FAKTURY_APP) si jednou stáhne vlastní do složky python/.
 # Když se server spustit nepodaří, vypíše důvod a skončí chybou (podrobnosti jsou v data/server.log).
 cd "$(dirname "$0")" || exit 1
 PORT=8765
@@ -36,17 +36,35 @@ download_python() {
   rm -rf python && mv "$tmp/python" python && rm -rf "$tmp"
 }
 
-if [ -n "${FAKTURY_APP:-}" ]; then
-  [ -x python/bin/python3 ] || download_python || exit 1
+system_python() {
+  local py
+  [ -n "${FAKTURY_STAHNOUT_PYTHON:-}" ] && return 1  # jen pro zkoušku stahování v CI
+  for py in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+    [ -x "$py" ] || continue
+    # Bez vývojářských nástrojů je /usr/bin/python3 jen zástupce, který by nabídl jejich instalaci.
+    [ "$py" = /usr/bin/python3 ] && ! xcode-select -p >/dev/null 2>&1 && continue
+    "$py" -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null && { echo "$py"; return 0; }
+  done
+  return 1
+}
+
+if [ -x python/bin/python3 ]; then
   PY=python/bin/python3
-  # Tenhle Python nezná certifikáty macOS (potřebuje je pro ARES a aktualizace), vezme si je ze systému.
+elif ! PY=$(system_python); then
+  if [ -z "${FAKTURY_APP:-}" ]; then
+    echo "Chybí Python 3.9 nebo novější (nainstaluješ ho příkazem xcode-select --install)." >&2
+    exit 1
+  fi
+  download_python || exit 1
+  PY=python/bin/python3
+fi
+if [ "$PY" = python/bin/python3 ]; then
+  # Stažený Python nezná certifikáty macOS (potřebuje je pro ARES a aktualizace), vezme si je ze systému.
   if [ ! -s python/cacert.pem ]; then
     security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates.keychain > python/cacert.pem 2>/dev/null
     [ -s python/cacert.pem ] || cp python/lib/python3*/site-packages/pip/_vendor/certifi/cacert.pem python/cacert.pem
   fi
   export SSL_CERT_FILE="$PWD/python/cacert.pem"
-else
-  PY=$(command -v /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3 | head -n 1)
 fi
 
 # Když běží jiná verze serveru, nebo se od jeho spuštění změnil kód, restartuj ho.

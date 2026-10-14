@@ -41,7 +41,7 @@ Faktury jsou v korunách a appka je česky.
 ## Požadavky
 
 - **Mac s macOS 12 nebo novějším** (Apple Silicon i Intel). Okno aplikace, záloha do iCloudu i tlačítko „Ukázat ve Finderu“ jsou psané pro Mac.
-- **Internet při prvním spuštění**: Faktury si stáhnou vlastní Python (asi 25 MB). Potom ho potřebují jen pro načítání firem z ARES a pro aktualizace.
+- **Internet** pro načítání firem z ARES a pro aktualizace. Když na Macu není Python, Faktury si při prvním spuštění stáhnou vlastní (asi 25 MB).
 
 Nic dalšího instalovat nemusíš.
 
@@ -52,7 +52,7 @@ Nic dalšího instalovat nemusíš.
 3. Otevři Faktury. Napoprvé je macOS nepustí a napíše, že aplikaci nemůže ověřit. Je to proto, že appka není placeně podepsaná u Applu.
    Klikni na **Hotovo**, otevři **Nastavení systému → Soukromí a zabezpečení**, sjeď dolů a u hlášky o Fakturách klikni na **Přesto otevřít** a potvrď. Tohle je potřeba jen jednou.
 
-Při prvním otevření si Faktury chvíli připravují (stahují Python). Pak se macOS zeptá, jestli smí přistupovat k iCloud Drive kvůli záloze. Klikni na **Povolit**.
+Když na Macu není Python, Faktury si ho při prvním otevření stáhnou, takže chvíli trvá, než naběhnou. Pak se macOS zeptá, jestli smí přistupovat k iCloud Drive kvůli záloze. Klikni na **Povolit**.
 Když omylem zakážeš: Nastavení systému → Soukromí a zabezpečení → Soubory a složky → Faktury.
 
 Faktury se otevřou ve vlastním okně. Najdeš je přes Spotlight (⌘ mezerník → „Faktury“) nebo v Launchpadu a můžeš si je nechat v Docku.
@@ -139,7 +139,7 @@ Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`
 
 Okno aplikace je v `macos/Faktury.swift` (AppKit a WebKit) a sestavuje ho `macos/sestavit.sh`, a to ve dvou podobách.
 Vývojová podoba (`instalovat.sh`) spouští Faktury ze složky projektu. Podoba ke stažení (`Faktury.zip` z GitHub Actions) nese kód v sobě a při spuštění ho nakopíruje do `~/Library/Application Support/Faktury`.
-Do stejné složky si stáhne Python z [python-build-standalone](https://github.com/astral-sh/python-build-standalone) (verze a kontrolní součty jsou v `spustit.sh`).
+Použije Python 3.9+, který na Macu už je (Homebrew, vývojářské nástroje od Applu). Když žádný není, stáhne si do stejné složky Python z [python-build-standalone](https://github.com/astral-sh/python-build-standalone) (verze a kontrolní součty jsou v `spustit.sh`).
 Po změně `macos/` nebo přesunutí složky projektu spusť `./instalovat.sh` znovu.
 
 **Vydání nové verze:** zvyš číslo v souboru `VERSION` (třeba z `1.0.0` na `1.1.0`) a pushni do `main`.
