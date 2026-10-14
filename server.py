@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
 import db
+import update
 
 PORT = int(os.environ.get("FAKTURY_PORT", "8765"))
 STATIC = db.ROOT / "static"
@@ -165,6 +166,15 @@ class Handler(BaseHTTPRequestHandler):
         # Věci, které nesahají na data, běží mimo zámek (ARES může chvíli trvat).
         if res == "ares" and method == "GET" and rid is not None:
             return self.send_json(ares_lookup(str(rid)))
+        if res == "version" and method == "GET":
+            return self.send_json({"version": update.current_version()})
+        if res == "update" and rid is None:
+            if method == "GET":
+                return self.send_json(update.status())
+            if method == "POST":
+                self.read_body()
+                self.send_json(update.install())
+                return update.restart_later()  # nový kód se načte restartem serveru
 
         upload = method == "PUT" and sub in ("pdf", "doc")
         body = self.read_json() if method in ("POST", "PUT") and not upload else None

@@ -1253,7 +1253,12 @@ async function viewSettings() {
         Před první změnou každého dne se uloží kopie do <b>data/zalohy</b> (posledních 30 dní).</p>
         ${cloudStatus(cloud)}
         <a class="btn" href="/api/export" download>Stáhnout zálohu dat</a>
+      </section>
+      <section class="card">
+        <h2>Aktualizace</h2>
+        <p class="hint" id="version-info" style="margin:0">Zjišťuji verzi…</p>
       </section>`;
+    showVersion();
 
     const form = $('#settings-form');
     form.addEventListener('input', () => (dirty = true));
@@ -1327,6 +1332,79 @@ function cloudStatus(c) {
   if (!c.last) return '<p class="hint">Záloha do iCloud Drive právě probíhá…</p>';
   const day = c.last.slice(0, 10) === isoDate() ? 'dnes' : Fmt.date(c.last.slice(0, 10));
   return `<p class="hint ok" style="margin-bottom:16px">Po každé změně se data zkopírují do iCloud Drive → <b>Faktury záloha</b>. Naposledy ${day} v ${c.last.slice(11, 16)} ✓</p>`;
+}
+
+// ---------- aktualizace ----------
+
+/** Lišta nad obsahem, která zůstává i při přechodu mezi stránkami. */
+function updateBar(html, action = '') {
+  const bar = $('#update');
+  bar.innerHTML = html ? `<div class="notice info"><span>${html}</span>${action}</div>` : '';
+  bar.hidden = !html;
+  const button = $('[data-update]', bar);
+  if (button) button.onclick = () => installUpdate();
+}
+
+/** Při otevření appky zjistí, jestli na GitHubu nevyšla nová verze, a rovnou ji nainstaluje. */
+async function checkForUpdate() {
+  const u = await api('update').catch(() => null);
+  if (!u?.available) return;
+  if (u.git) {
+    updateBar(`Vyšla nová verze Faktur ${esc(u.latest)}. Aktualizuješ ji příkazem <b>git pull</b>.`);
+  } else if (leaveGuard?.()) {
+    updateBar(`Vyšla nová verze Faktur ${esc(u.latest)}.`, '<button class="btn primary" data-update>Aktualizovat</button>');
+  } else {
+    installUpdate();
+  }
+}
+
+async function installUpdate() {
+  if (leaveGuard?.() && !confirm('Máš neuložené změny. Aktualizace stránku znovu načte – opravdu pokračovat?')) return;
+  updateBar('Aktualizuji Faktury na novou verzi…');
+  try {
+    const result = await api('update', { method: 'POST', body: {} });
+    // Server se restartuje s novým kódem – počkej, až naběhne.
+    for (let i = 0; i < 60; i++) {
+      await new Promise(done => setTimeout(done, 500));
+      const v = await api('version').catch(() => null);
+      if (v?.version !== result.version) continue;
+      try { sessionStorage.setItem('updated', JSON.stringify(result)); } catch {}
+      if (leaveGuard?.()) return updateBar(`Faktury jsou aktualizované na verzi ${esc(result.version)}. Po uložení změn načti stránku znovu (⌘R).`);
+      return location.reload();
+    }
+    throw new Error('Server se po aktualizaci nespustil. Zavři Faktury a otevři je znovu.');
+  } catch (e) {
+    updateBar(`Aktualizace se nepovedla: ${esc(e.message)}`);
+  }
+}
+
+/** Po aktualizaci a znovunačtení stránky řekne, co se stalo. */
+function announceUpdate() {
+  let result = null;
+  try {
+    result = JSON.parse(sessionStorage.getItem('updated'));
+    sessionStorage.removeItem('updated');
+  } catch {}
+  if (!result) return;
+  const done = `Faktury jsou aktualizované na verzi ${esc(result.version)}.`;
+  if (result.app_error) updateBar(`${done} Jen okno aplikace se nepodařilo sestavit – spusť ve složce Faktur <b>./instalovat.sh</b>.`);
+  else if (result.app_changed) updateBar(`${done} Zavři Faktury a otevři je znovu, ať se načte i nové okno aplikace.`);
+  else toast(done);
+}
+
+async function showVersion() {
+  const u = await api('update').catch(() => null);
+  const el = $('#version-info');
+  if (!u || !el) return;
+  let html = `Máš verzi <b>${esc(u.version)}</b>. `;
+  if (!u.latest) html += 'Nové verze se hledají na GitHubu při každém otevření Faktur.';
+  else if (!u.available) html += 'Je to nejnovější verze ✓';
+  else if (u.git) html += `Vyšla verze ${esc(u.latest)}, aktualizuješ ji příkazem <b>git pull</b>.`;
+  else html += `Vyšla verze ${esc(u.latest)}. <button class="btn primary" data-update>Aktualizovat</button>`;
+  if (u.url) html += ` <a href="${esc(u.url)}" target="_blank" rel="noopener">Co je nového</a>`;
+  el.innerHTML = html;
+  const button = $('[data-update]', el);
+  if (button) button.onclick = () => installUpdate();
 }
 
 // ---------- směrování ----------
@@ -1405,3 +1483,5 @@ app.addEventListener('click', e => {
 });
 
 router();
+announceUpdate();
+checkForUpdate();

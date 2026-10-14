@@ -1,4 +1,6 @@
 # Testy a sestavení Faktury.app na macOS (okno aplikace jde zkompilovat jen na Macu).
+# Když je v main v souboru VERSION číslo, které ještě nevyšlo, vydá se nová verze
+# a Faktury u ostatních si ji při dalším otevření stáhnou.
 name: macOS
 on: [push, pull_request]
 
@@ -11,3 +13,26 @@ jobs:
         run: python3 -m unittest discover tests
       - name: Sestavení Faktury.app
         run: ./instalovat.sh "$RUNNER_TEMP"
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Vydání nové verze
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "Verze $version už vyšla."
+            exit 0
+          fi
+          previous=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          git log --pretty='- %s' ${previous:+"$previous"..}HEAD > notes.md
+          gh release create "v$version" --title "Faktury $version" --notes-file notes.md --target "$GITHUB_SHA"

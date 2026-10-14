@@ -425,6 +425,11 @@ dialog .choices label { display: flex; align-items: center; gap: 10px; min-heigh
 dialog .choices label:hover { background: var(--fill); }
 dialog .choices input[type="date"] { width: auto; margin: 0 0 0 auto; min-height: 32px; padding: 4px 8px; }
 
+/* ---------- aktualizace ---------- */
+.update-bar { max-width: 1120px; margin: 20px auto -16px; padding: 0 24px; }
+.update-bar .notice { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; margin: 0; }
+#version-info .btn { margin: 0 8px; }
+
 /* ---------- toast ---------- */
 #toast {
   position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 30;

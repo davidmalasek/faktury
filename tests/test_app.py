@@ -5,15 +5,19 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import zipfile
 import urllib.request
 from datetime import date
 from http.server import ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import db  # noqa: E402
 import import_data  # noqa: E402
 import server  # noqa: E402
+import update  # noqa: E402
 
 YEAR = str(date.today().year)
 
@@ -263,6 +267,87 @@ class DataTests(TempData):
         self.assertEqual(self.stored()["invoices"], [])
 
 
+def release_zip(version, files, prefix=None):
+    """Archiv verze ve tvaru, v jakém ho dává GitHub (vše ve složce faktury-<verze>/)."""
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, (content, mode) in {"VERSION": (version, 0o644), "server.py": ("# nový", 0o644), **files}.items():
+            info = zipfile.ZipInfo(f"{prefix or 'faktury-' + version}/{name}")
+            info.external_attr = (0o100000 | mode) << 16
+            z.writestr(info, content)
+    return buf.getvalue()
+
+
+class UpdateTests(TempData):
+    def setUp(self):
+        super().setUp()
+        self.root = Path(self.tmp.name) / "app"
+        (self.root / "data").mkdir(parents=True)
+        (self.root / "data/faktury.json").write_text("moje data", encoding="utf-8")
+        (self.root / "VERSION").write_text("1.0.0\n", encoding="utf-8")
+        (self.root / "server.py").write_text("# starý", encoding="utf-8")
+        (self.root / "macos").mkdir()
+        (self.root / "macos/Faktury.swift").write_text("okno", encoding="utf-8")
+        update._cache.update(at=0.0, release=None)
+
+    def latest(self, version):
+        return mock.patch.object(update, "latest_release", return_value={
+            "tag": f"v{version}", "version": version, "notes": "", "url": "https://example.com"})
+
+    def test_versions_compare_as_numbers(self):
+        self.assertEqual(update.parse_version("v1.2"), (1, 2, 0))
+        self.assertGreater(update.parse_version("1.10.0"), update.parse_version("1.9.3"))
+
+    def test_apply_replaces_app_files_but_never_data(self):
+        content = release_zip("1.1.0", {
+            "spustit.sh": ("#!/bin/bash", 0o755),
+            "static/novy.js": ("// nový soubor", 0o644),
+            "data/faktury.json": ("cizí data", 0o644),
+        })
+        self.assertFalse(update.apply_zip(content, self.root, "1.1.0"))  # okno se nezměnilo
+        self.assertEqual(update.current_version(self.root), "1.1.0")
+        self.assertEqual((self.root / "server.py").read_text(encoding="utf-8"), "# nový")
+        self.assertEqual((self.root / "static/novy.js").read_text(encoding="utf-8"), "// nový soubor")
+        self.assertEqual((self.root / "data/faktury.json").read_text(encoding="utf-8"), "moje data")
+        self.assertTrue((self.root / "spustit.sh").stat().st_mode & 0o100)
+
+    def test_apply_reports_changed_app_window(self):
+        content = release_zip("1.1.0", {"macos/Faktury.swift": ("nové okno", 0o644)})
+        self.assertTrue(update.apply_zip(content, self.root, "1.1.0"))
+
+    def test_apply_rejects_bad_archives(self):
+        with self.assertRaisesRegex(ValueError, "poškozená"):
+            update.apply_zip(release_zip("1.1.0", {"../mimo.txt": ("x", 0o644)}, prefix="faktury"), self.root)
+        with self.assertRaisesRegex(ValueError, "jinou verzi"):
+            update.apply_zip(release_zip("1.1.0", {}), self.root, "1.2.0")
+        self.assertEqual((self.root / "server.py").read_text(encoding="utf-8"), "# starý")
+
+    def test_status_and_git_install(self):
+        with self.latest("1.1.0"):
+            self.assertTrue(update.status(self.root)["available"])
+            (self.root / ".git").mkdir()
+            self.assertTrue(update.status(self.root)["git"])
+            with self.assertRaisesRegex(ValueError, "git pull"):
+                update.install(self.root)
+        with self.latest("1.0.0"):
+            self.assertFalse(update.status(self.root)["available"])
+
+    def test_install_backs_up_and_applies(self):
+        content = release_zip("1.1.0", {})
+
+        class Response(BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        with self.latest("1.1.0"), mock.patch.object(update.urllib.request, "urlopen", return_value=Response(content)):
+            self.assertEqual(update.install(self.root), {"version": "1.1.0", "app_changed": False})
+        self.assertEqual(update.current_version(self.root), "1.1.0")
+        self.assertEqual(len(list(db.ZALOHY.glob("pred-aktualizaci-*.json"))), 1)
+
+
 class ServerTests(TempData):
     def setUp(self):
         super().setUp()
@@ -320,6 +405,14 @@ class ServerTests(TempData):
         status, _ = self.call("POST", "/api/contacts", b'{"name": "X"}', ctype="text/plain")
         self.assertEqual(status, 400)
         self.assertEqual(self.stored()["contacts"], [])
+
+    def test_version_and_update_status(self):
+        self.assertEqual(self.call("GET", "/api/version")[1], {"version": update.current_version()})
+        with mock.patch.object(update, "latest_release", return_value=None):
+            status, body = self.call("GET", "/api/update")
+        self.assertEqual((status, body["available"]), (200, False))
+        status, _ = self.call("POST", "/api/update", {}, headers={"Origin": "https://evil.example"})
+        self.assertEqual(status, 403)
 
     def test_static_files_cannot_escape(self):
         self.assertEqual(self.call("GET", "/../db.py")[0], 404)

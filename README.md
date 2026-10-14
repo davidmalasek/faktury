@@ -65,6 +65,17 @@ Když omylem zakážeš: Nastavení systému → Soukromí a zabezpečení → S
 
 Než vystavíš první fakturu, vyplň v **Nastavení** svoje údaje, číslo účtu a výdajový paušál.
 
+## Aktualizace
+
+Faktury se při každém otevření podívají na GitHub, jestli nevyšla nová verze. Když ano, samy ji stáhnou a nainstalují. Trvá to pár vteřin a pak se stránka sama načte znovu.
+Před aktualizací se data zazálohují do `data/zalohy` a složku `data` aktualizace nikdy nepřepíše.
+Kterou verzi máš, uvidíš v **Nastavení** dole.
+
+Když máš Faktury stažené přes `git clone`, appka jen oznámí, že vyšla nová verze, a aktualizuješ je příkazem `git pull`.
+
+Aktualizace většinou mění jen soubory ve složce projektu, takže se macOS na nic znovu neptá.
+Když se změní i okno aplikace, aktualizace ho sama znovu sestaví a appku je potřeba zavřít a otevřít. Pak se macOS může jednou znovu zeptat na přístup ke složkám.
+
 ## Soukromí
 
 Appka nemá žádný vlastní server ani účet a nic nikam neposílá. Data leží jen ve složce `data` u tebe na disku a v kopii na tvém iCloud Drive.
@@ -77,7 +88,7 @@ Appka poslouchá jen na `127.0.0.1`, takže se k ní nedostane nikdo jiný ze s�
 |---|---|
 | `data/faktury.json` | faktury, kontakty, nastavení (čitelný text) |
 | `data/archiv/ROK/` | PDF všech faktur a doklady k příjmům bez faktury |
-| `data/zalohy/` | automatická záloha před první změnou každého dne (30 dní) a před každým importem |
+| `data/zalohy/` | automatická záloha před první změnou každého dne (30 dní) a před každým importem a aktualizací |
 | `data/smazane/` | PDF smazaných faktur a dokladů (nic se nemaže natrvalo) |
 | iCloud Drive → `Faktury záloha` | kopie všeho výše, aktualizuje se po každé změně |
 
@@ -125,6 +136,10 @@ Bez závislostí: Python ze systému nebo z Homebrew, backend na standardní kni
 Okno aplikace je v `macos/Faktury.swift` (AppKit a WebKit). Sestavuje ho `instalovat.sh`, takže po jeho změně spusť instalaci znovu.
 PDF vytváří knihovna pdfmake, přibalená ve `static/vendor`.
 Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`.
+
+**Vydání nové verze:** zvyš číslo v souboru `VERSION` (třeba z `1.0.0` na `1.1.0`) a pushni do `main`.
+Když projdou testy a sestavení na macOS, GitHub Actions vytvoří vydání `v1.1.0` se seznamem commitů od minulé verze. Ostatním se pak nová verze nainstaluje při dalším otevření Faktur.
+Commity bez změny `VERSION` se nikomu neinstalují.
 
 **Každý rok** je potřeba zkontrolovat sazby a limity na začátku `static/app.js`:
 - doplnit rozhodnou částku pro sociální pojištění do `SOCIAL_LIMITS` (zveřejňuje se na podzim předchozího roku, 2026: 117 521 Kč),
