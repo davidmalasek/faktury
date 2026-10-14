@@ -28,7 +28,7 @@ jobs:
           pgrep -x Faktury
           # stažený Python a certifikáty (ARES a aktualizace jdou přes HTTPS)
           SSL_CERT_FILE="$support/python/cacert.pem" "$support/python/bin/python3" -c \
-            "import urllib.request; urllib.request.urlopen('https://api.github.com', timeout=20); print('HTTPS v pořádku')"
+            "import urllib.request; urllib.request.urlopen('https://github.com', timeout=20); print('HTTPS v pořádku')"
           pkill -x Faktury
           kill "$(cat "$support/data/server.pid")"
       - uses: actions/upload-artifact@v4
