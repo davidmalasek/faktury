@@ -1,6 +1,6 @@
 #!/bin/bash
-# Vytvoří spouštěč Faktury.app ve složce Aplikace (nebo ve složce z 1. argumentu).
-# Spouštěč jen zavolá spustit.sh z této složky. Když složku projektu přesuneš, spusť instalaci znovu.
+# Sestaví aplikaci Faktury.app s vlastním oknem do složky Aplikace (nebo do složky z 1. argumentu).
+# Aplikace spouští server z této složky. Když složku projektu přesuneš, spusť instalaci znovu.
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO=$(pwd)
@@ -9,32 +9,65 @@ APP="$DEST/Faktury.app"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# cesta jako řetězec v AppleScriptu
-path=${REPO//\\/\\\\}
-path=${path//\"/\\\"}
+if ! xcrun --find swiftc >/dev/null 2>&1; then
+  echo "Chybí vývojářské nástroje macOS (Command Line Tools). Nainstaluj je příkazem" >&2
+  echo "  xcode-select --install" >&2
+  echo "a pak spusť ./instalovat.sh znovu." >&2
+  exit 1
+fi
 
-cat > "$TMP/faktury.applescript" <<EOF
-on run
-	set appFolder to "$path"
-	set launcher to appFolder & "/spustit.sh"
-	try
-		do shell script "test -x " & quoted form of launcher
-	on error
-		display alert "Faktury nejdou spustit" message "Složka aplikace není na svém místě:" & return & appFolder & return & return & "Pokud se přesunula, spusť v ní znovu instalovat.sh."
-		return
-	end try
-	do shell script quoted form of launcher
-end run
+echo "Sestavuji Faktury.app…"
+CONTENTS="$TMP/Faktury.app/Contents"
+mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
+xcrun swiftc -O -swift-version 5 -target "$(uname -m)-apple-macos12.0" \
+  -o "$CONTENTS/MacOS/Faktury" macos/Faktury.swift
+cp macos/Faktury.icns "$CONTENTS/Resources/Faktury.icns"
+cat > "$CONTENTS/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>cs</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>cs</string>
+	</array>
+	<key>CFBundleExecutable</key>
+	<string>Faktury</string>
+	<key>CFBundleIconFile</key>
+	<string>Faktury</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.faktury</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Faktury</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.finance</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+</dict>
+</plist>
 EOF
-
-osacompile -o "$TMP/Faktury.app" "$TMP/faktury.applescript"
-cp macos/Faktury.icns "$TMP/Faktury.app/Contents/Resources/applet.icns"
-rm -f "$TMP/Faktury.app/Contents/Resources/Assets.car"
-PLIST="$TMP/Faktury.app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$PLIST" 2>/dev/null || true
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier local.faktury" "$PLIST" 2>/dev/null ||
-  /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string local.faktury" "$PLIST"
-codesign --force --deep --sign - "$TMP/Faktury.app"
+# složka projektu, ze které aplikace spouští server
+plutil -insert FakturyFolder -string "$REPO" "$CONTENTS/Info.plist"
+codesign --force --sign - "$TMP/Faktury.app"
 
 rm -rf "$APP"
 ditto "$TMP/Faktury.app" "$APP"

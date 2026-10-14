@@ -1,0 +1,13 @@
+# Testy a sestavení Faktury.app na macOS (okno aplikace jde zkompilovat jen na Macu).
+name: macOS
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Testy
+        run: python3 -m unittest discover tests
+      - name: Sestavení Faktury.app
+        run: ./instalovat.sh "$RUNNER_TEMP"

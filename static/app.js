@@ -57,7 +57,7 @@ async function api(path, { method = 'GET', body } = {}) {
   try {
     res = await fetch('/api/' + path, init);
   } catch {
-    throw new Error('Aplikace neběží – spusť ji znovu ikonou Faktury.');
+    throw new Error('Server Faktur neběží – stiskni ⌘R, nebo Faktury zavři a spusť znovu.');
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Chyba ${res.status}`);

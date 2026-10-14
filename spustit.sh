@@ -1,5 +1,6 @@
 #!/bin/bash
-# Spustí Faktury (pokud ještě neběží) a otevře je v prohlížeči.
+# Spustí server Faktur na pozadí, pokud ještě neběží. Volá ho Faktury.app při každém otevření.
+# Když se server spustit nepodaří, skončí chybou (podrobnosti jsou v data/server.log).
 cd "$(dirname "$0")" || exit 1
 PORT=8765
 URL="http://localhost:$PORT"
@@ -18,8 +19,4 @@ if ! running; then
   for _ in $(seq 1 50); do running && break; sleep 0.1; done
 fi
 
-if running; then
-  open "$URL"
-else
-  osascript -e 'display alert "Faktury se nepodařilo spustit" message "Podrobnosti jsou v souboru data/server.log ve složce aplikace."'
-fi
+running

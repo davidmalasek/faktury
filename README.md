@@ -40,8 +40,9 @@ Faktury jsou v korunách a appka je česky.
 
 ## Požadavky
 
-- **Jen macOS.** Instalace, spouštěč, záloha do iCloudu i tlačítko „Ukázat ve Finderu“ jsou psané pro Mac. Jádro je Python a webová stránka, ale na Linuxu ani Windows to vyzkoušené není.
-- **Python 3.9 nebo novější.** Stačí ten ze systému: když chybí, macOS ho při prvním spuštění nabídne doinstalovat (nebo `xcode-select --install`). Jde to i s Pythonem z Homebrew. Žádné další balíčky nejsou potřeba.
+- **Jen macOS 12 nebo novější.** Instalace, okno aplikace, záloha do iCloudu i tlačítko „Ukázat ve Finderu“ jsou psané pro Mac. Jádro je Python a webová stránka, ale na Linuxu ani Windows to vyzkoušené není.
+- **Vývojářské nástroje (Command Line Tools)**, ze kterých instalace sestaví aplikaci. Když chybí, nainstaluješ je příkazem `xcode-select --install`. Máš je i s Homebrew.
+- **Python 3.9 nebo novější.** Stačí ten ze systému (je součástí Command Line Tools), jde to i s Pythonem z Homebrew. Žádné další balíčky nejsou potřeba.
 - Internet jen pro načítání firem z ARES. Všechno ostatní funguje offline.
 
 ## Instalace a spuštění
@@ -52,10 +53,12 @@ Stáhni repozitář (`git clone` nebo Code → Download ZIP), dej složku tam, k
 ./instalovat.sh
 ```
 
-Skript vytvoří **Faktury.app** ve složce Aplikace. Pak ji spustíš přes Spotlight (⌘ mezerník → „Faktury“), Launchpad nebo Finder → Aplikace.
-Otevře se v prohlížeči na adrese http://localhost:8765.
+Skript sestaví aplikaci **Faktury.app** ve složce Aplikace. Pak ji spustíš přes Spotlight (⌘ mezerník → „Faktury“), Launchpad nebo Finder → Aplikace a můžeš si ji nechat v Docku.
+Otevře se ve vlastním okně, bez prohlížeče. PDF faktur a zálohu dat uložíš přes běžný dialog, velikost stránky změníš ⌘+ a ⌘−.
 
-Faktury.app jen spustí `spustit.sh` z této složky. Když složku projektu přesuneš, spusť `./instalovat.sh` znovu.
+Při otevření aplikace se na pozadí spustí server z této složky (`spustit.sh`). Běží dál i po zavření okna, takže další otevření je hned.
+Dokud běží, appka funguje i v prohlížeči na adrese http://localhost:8765.
+Když složku projektu přesuneš, spusť `./instalovat.sh` znovu. Stejně tak nahradíš starší Faktury.app, která otevírala prohlížeč.
 
 Při prvním spuštění se macOS zeptá, jestli smí Faktury přistupovat ke složce Dokumenty a k iCloud Drive. Klikni na **Povolit**.
 Když omylem zakážeš: Nastavení systému → Soukromí a zabezpečení → Soubory a složky → Faktury.
@@ -81,7 +84,7 @@ Appka poslouchá jen na `127.0.0.1`, takže se k ní nedostane nikdo jiný ze s�
 Složka `data` se do gitu záměrně neukládá, protože obsahuje osobní údaje klientů.
 Stav zálohy do iCloudu je vidět v Nastavení. Z iCloudu se nic nemaže, kromě denních záloh starších než 30 dní.
 
-**Obnovení:** zavři appku (`kill $(cat data/server.pid)`) a jedním z těchto způsobů vrať soubor `data/faktury.json`:
+**Obnovení:** zavři okno Faktur, vypni server (`kill $(cat data/server.pid)`) a jedním z těchto způsobů vrať soubor `data/faktury.json`:
 - zkopíruj na jeho místo vybraný soubor z `data/zalohy`,
 - nebo celý obsah složky `Faktury záloha` z iCloud Drive zkopíruj do `data/`.
 
@@ -119,6 +122,7 @@ python3 import_data.py soubor.json --zkouska   # import starých dat (formát po
 ```
 
 Bez závislostí: Python ze systému nebo z Homebrew, backend na standardní knihovně a frontend v čistém JavaScriptu.
+Okno aplikace je v `macos/Faktury.swift` (AppKit a WebKit). Sestavuje ho `instalovat.sh`, takže po jeho změně spusť instalaci znovu.
 PDF vytváří knihovna pdfmake, přibalená ve `static/vendor`.
 Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`.
 
