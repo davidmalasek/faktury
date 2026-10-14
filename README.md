@@ -45,6 +45,7 @@ Faktury a [Hodinovka](https://github.com/davidmalasek/hodinovka) (měření odpr
 - **Kontakty se sdílí.** Klient z Hodinovky se nabídne u nové faktury (a v Kontaktech) a kontakt z Faktur se nabídne v Hodinovce. Jakmile ho jednou použiješ, zůstanou propojené a změny údajů se přenesou do druhé aplikace. Klient z Hodinovky nemusí mít IČO, doplníš ho tady (třeba z ARES).
 - **Faktura za odpracovaný čas.** V Hodinovce vybereš záznamy a dáš Vyfakturovat. Tady se vytvoří faktura s položkami, hodinami a cenami, číslo, splatnost a tvoje údaje doplní Faktury samy. U faktury je odkaz zpátky do Hodinovky.
 - **Stav se vrací.** Hodinovka vidí, jestli je faktura zaplacená nebo stornovaná. Když fakturu smažeš, nabídne vrátit čas mezi nevyfakturovaný.
+- **Všechno hned.** Otevřené okno se samo obnoví, když se něco změní v druhé aplikaci: faktura z Hodinovky se tu ukáže do pár vteřin, nic nemusíš načítat znovu.
 - Hodinovku nainstaluješ jedním kliknutím v **Nastavení → Propojené aplikace**.
 
 Je jedno, kterou aplikaci si stáhneš dřív. Obě v sobě nesou to, co k propojení potřebují. Jak to funguje uvnitř, popisuje [docs/mejvos.md](docs/mejvos.md).

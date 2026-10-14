@@ -57,5 +57,6 @@ Všechno je v `static/app.css`. Novou aplikaci začni kopií z Faktur a jen při
 - **Okno pro macOS:** malý program ve Swiftu (`macos/<Nazev>.swift`, AppKit + WebKit), který spustí server (`spustit.sh`) a ukáže ho ve vlastním okně. Nativní dialogy, ukládání souborů, zoom ⌘+ / ⌘−, odkazy `<id>://cesta`.
 - **Instalace:** `<Nazev>.zip` z GitHub Releases. Aplikace si při prvním spuštění zkopíruje kód do `~/Library/Application Support/<Nazev>` a když na Macu není Python, stáhne vlastní.
 - **Aktualizace:** při každém otevření se podívá na GitHub, nová verze se sama stáhne a nainstaluje (data se předtím zazálohují). Vydání = zvýšit `VERSION` a pushnout do `main`, GitHub Actions udělají zbytek.
+- **Živé obnovení:** stránka se každé 2 s (a při návratu do okna) zeptá na `GET /api/rev`, otisk dat a toho, co zveřejnily ostatní aplikace (`db.revision()`). Když se změnil, překreslí se (`router(false)`, pozice i hledání zůstanou). Nikdy pod rukama: ne během požadavku, s otevřeným dialogem, vybranými řádky, rozepsaným textem ani neuloženými změnami. Odpovědi na změny posílají hlavičku `X-Rev`, takže vlastní změnu stránka znovu nenačítá.
 - **Propojení:** `mejvos.py` a `docs/mejvos.md`.
 - **Testy:** `python3 -m unittest discover tests` (data, server, aktualizace, propojení).

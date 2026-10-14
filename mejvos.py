@@ -133,8 +133,14 @@ def announce(app_id, *, name, version, port, root, provides, env=None):
 
 
 def publish(app_id, kind, items, **extra):
-    """Zveřejní seznam (contacts, invoices…) do <kind>/<app_id>.json, ať ho ostatní přečtou i bez serveru."""
-    _publish_file(HOME / kind / f"{app_id}.json", {"app": app_id, "updated_at": now(), **extra, "items": list(items)})
+    """Zveřejní seznam (contacts, invoices…) do <kind>/<app_id>.json, ať ho ostatní přečtou i bez serveru.
+    Když se od minula nic nezměnilo, soubor nepřepíše, ať se ostatní aplikace zbytečně neobnovují."""
+    path = HOME / kind / f"{app_id}.json"
+    value = {"app": app_id, "updated_at": now(), **extra, "items": list(items)}
+    old = _read_json(path) if ENABLED else None
+    if isinstance(old, dict) and {**old, "updated_at": None} == json.loads(json.dumps({**value, "updated_at": None})):
+        return
+    _publish_file(path, value)
 
 
 def publish_contacts(app_id, rows):
@@ -187,7 +193,8 @@ def signature(kind, exclude=None):
     for path in sorted((HOME / kind).glob("*.json")):
         if path.stem != exclude:
             try:
-                sig.append((path.stem, path.stat().st_mtime_ns))
+                st = path.stat()  # i inode: každé zveřejnění je nový soubor, i když se stihne ve stejném okamžiku
+                sig.append((path.stem, st.st_mtime_ns, st.st_ino))
             except OSError:
                 pass
     return tuple(sig)
@@ -331,7 +338,8 @@ def _open_and_wait(app_id, path, capability=None, wait=180):
         if app and (capability is None or capability in (app.get("provides") or [])) and alive(app):
             return app
         time.sleep(0.5)
-    raise PeerError(f"Aplikace {CATALOG[app_id]['name']} se nespustila. Otevři ji a zkus to znovu.")
+    raise PeerError(f"Aplikace {CATALOG[app_id]['name']} se nespustila, nebo je moc stará. "
+                    "Otevři ji, nech ji aktualizovat a zkus to znovu.")
 
 
 def open_app(app_id):

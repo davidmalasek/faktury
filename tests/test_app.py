@@ -534,6 +534,20 @@ class ServerTests(TempData):
         status, _ = self.call("POST", "/api/os/invoices", body, headers={"Origin": "https://evil.example"})
         self.assertEqual(status, 403)
 
+    def test_revision_follows_changes(self):
+        _, first = self.call("GET", "/api/rev")
+        self.assertEqual(self.call("GET", "/api/rev")[1], first)
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/os/invoices", method="POST",
+                                     data=json.dumps(EcosystemTests.linked(self, "r9")).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as r:
+            own = r.headers["X-Rev"]
+        _, now = self.call("GET", "/api/rev")
+        self.assertNotEqual(now, first)  # okno Faktur se obnoví, když fakturu vystaví Hodinovka
+        self.assertEqual(own, now["rev"])
+        EcosystemTests.peer(self, [{"uid": "u1", "name": "Pekárna"}])  # Hodinovka zveřejnila klienty
+        self.assertNotEqual(self.call("GET", "/api/rev")[1], now)
+
     def test_static_files_cannot_escape(self):
         self.assertEqual(self.call("GET", "/../db.py")[0], 404)
         self.assertEqual(self.call("GET", "/archiv/../faktury.json")[0], 404)

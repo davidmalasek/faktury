@@ -1,5 +1,6 @@
 """Data fakturace – vše je v jednom čitelném souboru data/faktury.json.
 Sdílí ho server i import starých dat."""
+import hashlib
 import json
 import os
 import re
@@ -177,6 +178,18 @@ def sync_peers():
 def offered_contacts(data):
     """Kontakty z ostatních aplikací, které ve Fakturách ještě nejsou – nabízí se u faktury i v kontaktech."""
     return mejvos.offered_contacts(data["contacts"], mejvos.peer_contacts(APP_ID))
+
+
+def revision():
+    """Otisk dat pro živé obnovení okna. Změní se po každém uložení (i z jiného okna nebo z prohlížeče)
+    a když jiná aplikace zveřejní nové kontakty nebo stav faktur."""
+    try:
+        st = DATA_FILE.stat()
+        own = (st.st_mtime_ns, st.st_size, st.st_ino)  # ukládá se vždy do nového souboru (viz _save)
+    except OSError:
+        own = None
+    sig = (own, mejvos.signature("contacts", APP_ID), mejvos.signature("invoices", APP_ID))
+    return hashlib.sha1(repr(sig).encode()).hexdigest()[:16]
 
 
 # ---------- záloha do iCloud Drive ----------

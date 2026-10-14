@@ -76,6 +76,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if self.command != "GET":
+            self.send_header("X-Rev", db.revision())  # okno tak pozná, že změnu udělalo samo
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
@@ -191,6 +193,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"ok": True})
 
         db.sync_peers()
+        if res == "rev" and method == "GET":
+            return self.send_json({"rev": db.revision()})
 
         upload = method == "PUT" and sub in ("pdf", "doc")
         body = self.read_json() if method in ("POST", "PUT") and not upload else None

@@ -44,6 +44,9 @@ const STATUS_FILTERS = [
 
 // ---------- pomocné ----------
 
+let busy = 0; // rozpracované požadavky – mezitím se stránka sama neobnoví
+let seenRev = null; // stav dat, který stránka ukazuje (viz živé obnovení)
+
 async function api(path, { method = 'GET', body } = {}) {
   const init = { method, headers: {} };
   if (body instanceof Blob) {
@@ -54,11 +57,15 @@ async function api(path, { method = 'GET', body } = {}) {
     init.headers['Content-Type'] = 'application/json';
   }
   let res;
+  busy++;
   try {
     res = await fetch('/api/' + path, init);
   } catch {
     throw new Error('Server Faktur neběží – stiskni ⌘R, nebo Faktury zavři a spusť znovu.');
+  } finally {
+    busy--;
   }
+  if (res.headers.get('X-Rev')) seenRev = res.headers.get('X-Rev'); // změnu udělala tahle stránka
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Chyba ${res.status}`);
   return data;
@@ -1468,6 +1475,42 @@ async function showVersion() {
   if (button) button.onclick = () => installUpdate();
 }
 
+// ---------- živé obnovení ----------
+
+/* Když se data změní jinde (v Hodinovce, v druhém okně nebo v prohlížeči), otevřená stránka se sama obnoví.
+   Neruší: počká, dokud uživatel něco píše, má otevřený dialog, vybrané řádky nebo neuložené změny. */
+function canRefresh() {
+  const el = document.activeElement;
+  // rozepsaný text (kromě hledání, to se po obnovení vrátí) by obnovení smazalo
+  const typed = $$('input, textarea', app).some(i => !['search', 'checkbox', 'radio', 'file'].includes(i.type) && i.value !== i.defaultValue);
+  return !busy && !leaveGuard?.() && !typed && !$('dialog[open]') && !$('.bulkbar:not([hidden])') &&
+    !(el && app.contains(el) && el.matches('input, textarea, select')) && !String(window.getSelection?.() || '');
+}
+
+async function refreshView() {
+  const q = $('#search')?.value;
+  await router(false);
+  const search = $('#search');
+  if (q && search && !search.value) {
+    search.value = q;
+    search.dispatchEvent(new Event('input'));
+  }
+}
+
+async function watchChanges() {
+  if (document.hidden) return;
+  const r = await fetch('/api/rev').then(res => res.json()).catch(() => null);
+  if (!r?.rev || r.rev === seenRev) return;
+  if (seenRev !== null && !canRefresh()) return; // zkusí to znovu za chvíli
+  const changed = seenRev !== null;
+  seenRev = r.rev;
+  if (changed) refreshView();
+}
+
+setInterval(watchChanges, 2000);
+window.addEventListener('focus', watchChanges);
+document.addEventListener('visibilitychange', watchChanges);
+
 // ---------- směrování ----------
 
 const routes = [
@@ -1543,6 +1586,7 @@ app.addEventListener('click', e => {
   if (row && !e.target.closest('a, button, input, label, select, .sel')) location.hash = row.dataset.href;
 });
 
+watchChanges();
 router();
 announceUpdate();
 checkForUpdate();

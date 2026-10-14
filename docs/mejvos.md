@@ -24,7 +24,8 @@ Nic. Sdílená složka a společný kód jsou součástí každé aplikace:
 ```
 
 Do složky zapisuje každá aplikace jen svoje soubory. Ostatní je jen čtou, takže druhá aplikace kvůli tomu nemusí běžet.
-Soubory se zapisují atomicky (dočasný soubor a přejmenování).
+Soubory se zapisují atomicky (dočasný soubor a přejmenování), a jen když se jejich obsah změnil.
+Ostatní aplikace tak poznají změnu podle otisku souborů (`mejvos.signature`) a jejich otevřená okna se samo obnoví (živé obnovení v `docs/styl.md`).
 Při testech a s testovacími daty se do skutečné složky nezapisuje. Jinou složku nastaví proměnná `MEJVOS_DIR`.
 
 ### Manifest (`apps/<id>.json`)
