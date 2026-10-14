@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-NAME = "MejvOS"  # název celého systému (pracovní) – mění se jen tady
+NAME = "MejvOS"  # název celého systému; podle něj se jmenuje i sdílená složka, proto ho neměň
 PROTOCOL = 1
 HOME = Path(os.environ.get("MEJVOS_DIR") or Path.home() / "Library/Application Support" / NAME)
 # Zapisovat do sdílené složky smí jen opravdu spuštěný server (ne testy ani testovací data).

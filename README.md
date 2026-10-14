@@ -40,7 +40,7 @@ Faktury jsou v korunách a appka je česky.
 
 ## Propojení s Hodinovkou
 
-Faktury a [Hodinovka](https://github.com/davidmalasek/hodinovka) (měření odpracovaného času) patří do jednoho systému aplikací (pracovně **MejvOS**). Když jsou na Macu obě, najdou se samy a nic se nenastavuje:
+Faktury a [Hodinovka](https://github.com/davidmalasek/hodinovka) (měření odpracovaného času) patří do jednoho systému aplikací **MejvOS**. Když jsou na Macu obě, najdou se samy a nic se nenastavuje:
 
 - **Kontakty se sdílí.** Klient z Hodinovky se nabídne u nové faktury (a v Kontaktech) a kontakt z Faktur se nabídne v Hodinovce. Jakmile ho jednou použiješ, zůstanou propojené a změny údajů se přenesou do druhé aplikace. Klient z Hodinovky nemusí mít IČO, doplníš ho tady (třeba z ARES).
 - **Faktura za odpracovaný čas.** V Hodinovce vybereš záznamy a dáš Vyfakturovat. Tady se vytvoří faktura s položkami, hodinami a cenami, číslo, splatnost a tvoje údaje doplní Faktury samy. U faktury je odkaz zpátky do Hodinovky.

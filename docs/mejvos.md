@@ -1,6 +1,6 @@
 # MejvOS – jak spolu aplikace mluví
 
-MejvOS (pracovní název) je skupina malých aplikací pro Mac, které o sobě vědí a spolupracují: **Faktury**, **Hodinovka** a další, které přibudou.
+MejvOS je skupina malých aplikací pro Mac, které o sobě vědí a spolupracují: **Faktury**, **Hodinovka** a další, které přibudou.
 Každá aplikace funguje i sama. Když jsou na Macu dvě, najdou se a propojí se bez nastavování.
 
 Tenhle soubor je stejný ve všech repozitářích systému. Kdo píše novou aplikaci, řídí se jím.
@@ -124,4 +124,4 @@ Když je aplikace nainstalovaná, ale ještě nikdy neběžela (manifest chybí)
 
 Když se protokol změní nekompatibilně, zvyš `PROTOCOL`. Starší aplikace pak nové funkce jen nenabídnou, nic nespadne.
 
-Název systému je zatím pracovní a mění se jen v `mejvos.py` (`NAME`). Podle něj se jmenuje i sdílená složka, takže ho je potřeba rozhodnout před prvním vydáním.
+Název systému je v `mejvos.py` (`NAME`). Podle něj se jmenuje i sdílená složka, takže se už nemění: aplikace s jiným názvem by se navzájem nenašly.
