@@ -207,7 +207,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error_json(404, "Neznámá adresa.")
         if isinstance(result, tuple):
             result, status, headers = result
-        if res == "os" and rid == "invoices" and method == "POST":
+        if res == "os" and rid == "invoices" and sub is None and method == "POST":
             result, status = {k: result.get(k) for k in ("id", "number", "status", "total", "issue_date", "due_date")}, 201
         if res == "invoices" and sub == "reveal":
             target = db.ARCHIV / result["pdf_file"] if result.get("pdf_file") else db.ARCHIV
@@ -250,6 +250,8 @@ class Handler(BaseHTTPRequestHandler):
                 return db.save_invoice(data, body), 201, None
             if method == "POST" and rid == "status":
                 return db.mark_paid_many(data, body.get("changes"))
+            if method == "POST" and rid == "delete":
+                return db.delete_invoices(data, body.get("ids"))
             if isinstance(rid, int):
                 if sub is None and method == "GET":
                     return db.get_invoice(data, rid)
@@ -290,8 +292,10 @@ class Handler(BaseHTTPRequestHandler):
                         "protocol": mejvos.PROTOCOL, "provides": list(PROVIDES), "ready": db.settings_ready(data)}
             if rid == "contacts" and method == "GET":
                 return [mejvos.contact(c) for c in data["contacts"]]
-            if rid == "invoices" and method == "POST":
+            if rid == "invoices" and sub is None and method == "POST":
                 return db.create_linked_invoice(data, body)
+            if rid == "invoices" and sub == "delete" and method == "POST":
+                return db.delete_linked_invoice(data, body)
 
         elif res == "next-number" and method == "GET":
             return {"number": db.next_number(data)}

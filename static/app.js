@@ -225,10 +225,28 @@ async function markPaid(invoices, button) {
   }, button);
 }
 
+/** Smaže faktury (jednu z detailu nebo víc vybraných v seznamu). Vrátí true, když je smazal. */
+async function deleteInvoices(list, button) {
+  const one = list.length === 1;
+  const paid = list.filter(i => i.status === 'paid').length;
+  const apps = [...new Set(list.filter(i => i.source).map(i => i.source.name))];
+  const lines = [
+    `Maž jen omylem ${one ? 'vytvořenou fakturu' : 'vytvořené faktury'} – jinak vznikne v číselné řadě díra. Na zrušení platné faktury použij Stornovat.`,
+    !paid ? '' : one ? 'Faktura je už zaplacená.' : paid === 1 ? 'Jedna z nich je už zaplacená.' : `Zaplacených je mezi nimi ${paid}.`,
+    apps.length ? `V aplikaci ${apps.join(' a ')} se odpracovaný čas vrátí mezi nevyfakturovaný.` : '',
+  ];
+  if (!confirm(`Opravdu smazat ${one ? `fakturu ${list[0].number}` : plural(list.length, 'fakturu', 'faktury', 'faktur')}?\n\n${lines.filter(Boolean).join('\n\n')}`)) return false;
+  return Boolean(await attempt(async () => {
+    await api('invoices/delete', { method: 'POST', body: { ids: list.map(i => i.id) } });
+    toast(one ? 'Faktura smazána' : plural(list.length, 'faktura smazána', 'faktury smazány', 'faktur smazáno'));
+    return true;
+  }, button));
+}
+
 function invoiceRows(rows, { selectable = false } = {}) {
   return rows.map(i => `
     <tr data-href="#/faktura/${i.id}" data-id="${i.id}">
-      ${selectable ? `<td class="sel">${i.status === 'issued' ? `<label><input type="checkbox" data-select="${i.id}" aria-label="Vybrat fakturu ${esc(i.number)}"></label>` : ''}</td>` : ''}
+      ${selectable ? `<td class="sel"><label><input type="checkbox" data-select="${i.id}" aria-label="Vybrat fakturu ${esc(i.number)}"></label></td>` : ''}
       <td class="strong nowrap"><a href="#/faktura/${i.id}" style="color:inherit">${esc(i.number)}</a>${i.imported ? '<span class="tag hide-sm">převzatá</span>' : ''}</td>
       <td>${esc(i.customer.name)}<div class="show-sm">${statusLabel(i)}</div></td>
       <td class="nowrap hide-sm">${Fmt.date(i.issue_date)}</td>
@@ -241,7 +259,7 @@ function invoiceTable(rows, opts = {}) {
   return `
     <div class="table-scroll"><table class="list">
       <thead><tr>
-        ${opts.selectable ? '<th class="sel"><label><input type="checkbox" data-select-all aria-label="Vybrat všechny nezaplacené"></label></th>' : ''}
+        ${opts.selectable ? '<th class="sel"><label><input type="checkbox" data-select-all aria-label="Vybrat všechny"></label></th>' : ''}
         <th>Číslo</th><th>Odběratel</th><th class="hide-sm">Vystaveno</th><th class="hide-sm">Splatnost</th><th class="num">Částka</th><th class="hide-sm">Stav</th>
       </tr></thead>
       <tbody>${invoiceRows(rows, opts)}</tbody>
@@ -558,6 +576,7 @@ async function viewInvoices(params) {
       q: params.get('q') || '',
     };
     const selected = new Set();
+    const chosen = () => invoices.filter(i => selected.has(i.id));
 
     app.innerHTML = `
       <div class="page-head">
@@ -578,6 +597,7 @@ async function viewInvoices(params) {
       <div class="bulkbar" id="bulkbar" hidden>
         <span class="count" id="bulk-count"></span>
         <button type="button" class="btn ghost" id="bulk-clear">Zrušit výběr</button>
+        <button type="button" class="btn ghost danger" id="bulk-delete">Smazat…</button>
         <button type="button" class="btn primary" id="bulk-paid">Označit jako zaplacené…</button>
       </div>`;
 
@@ -606,6 +626,9 @@ async function viewInvoices(params) {
       const bar = $('#bulkbar');
       bar.hidden = selected.size === 0;
       $('#bulk-count').textContent = `Vybráno: ${plural(selected.size, 'faktura', 'faktury', 'faktur')}`;
+      const unpaid = chosen().filter(i => i.status === 'issued').length;
+      $('#bulk-paid').hidden = !unpaid;
+      $('#bulk-paid').textContent = unpaid === selected.size ? 'Označit jako zaplacené…' : `Označit ${unpaid} jako zaplacené…`;
       $$('tr[data-id]').forEach(tr => tr.classList.toggle('selected', selected.has(Number(tr.dataset.id))));
       const boxes = $$('[data-select]');
       const all = $('[data-select-all]');
@@ -620,7 +643,7 @@ async function viewInvoices(params) {
         b.classList.toggle('on', b.dataset.stav === f.stav);
         b.setAttribute('aria-pressed', String(b.dataset.stav === f.stav));
       });
-      for (const id of [...selected]) if (!rows.some(r => r.id === id && r.status === 'issued')) selected.delete(id);
+      for (const id of [...selected]) if (!rows.some(r => r.id === id)) selected.delete(id);
       const active = rows.filter(i => i.status !== 'cancelled');
       $('#list').innerHTML = rows.length
         ? invoiceTable(rows, { selectable: true, footer: `${plural(rows.length, 'faktura', 'faktury', 'faktur')} · celkem ${Fmt.money(sum(active))}` })
@@ -664,7 +687,8 @@ async function viewInvoices(params) {
       $$('[data-select]').forEach(b => (b.checked = false));
       updateBulk();
     };
-    $('#bulk-paid').onclick = e => markPaid(invoices.filter(i => selected.has(i.id)), e.currentTarget);
+    $('#bulk-paid').onclick = e => markPaid(chosen().filter(i => i.status === 'issued'), e.currentTarget);
+    $('#bulk-delete').onclick = e => deleteInvoices(chosen(), e.currentTarget).then(done => done && router(false));
     draw();
   };
 }
@@ -736,15 +760,13 @@ async function viewInvoice(params, id) {
       },
       restore: () => setStatus('issued'),
       reveal: () => api(`invoices/${inv.id}/reveal`, { method: 'POST', body: {} }),
-      delete: async () => {
-        const linked = inv.source ? ` ${inv.source.name} pak nabídne vrátit odpracovaný čas mezi nevyfakturovaný.` : '';
-        if (!confirm(`Opravdu smazat fakturu ${inv.number}?\n\nMaž jen omylem vytvořenou fakturu – jinak vznikne v číselné řadě díra. Na zrušení platné faktury použij Stornovat.${linked}`)) return;
-        await api('invoices/' + inv.id, { method: 'DELETE' });
-        toast('Faktura smazána');
-        location.hash = '#/faktury';
-      },
+      delete: null, // řeší deleteInvoices níže (kolečko až po potvrzení)
     };
-    $$('[data-act]').forEach(b => (b.onclick = () => (b.dataset.act === 'paid' ? markPaid([inv], b) : attempt(actions[b.dataset.act], b))));
+    $$('[data-act]').forEach(b => (b.onclick = async () => {
+      if (b.dataset.act === 'paid') return markPaid([inv], b);
+      if (b.dataset.act !== 'delete') return attempt(actions[b.dataset.act], b);
+      if (await deleteInvoices([inv], b)) location.hash = '#/faktury';
+    }));
     const paid = $('#paid-date');
     if (paid) paid.onchange = () => paid.value && attempt(async () => {
       await setStatus('paid', paid.value);

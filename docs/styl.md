@@ -42,7 +42,7 @@ Všechno je v `static/app.css`. Novou aplikaci začni kopií z Faktur a jen při
 - **Tlačítka:** `.btn` (šedé), `.btn.primary` (modré, jedno na obrazovku), `.btn.ghost` (jen text), `.danger` (červený text). Při čekání se tlačítko zablokuje a po 150 ms ukáže kolečko (`attempt()`).
 - **Karty s čísly:** `.kpis` se 4 `.kpi` (popisek, velké číslo, šedý dovětek). Klikací karta vede na filtrovaný seznam.
 - **Tabulky:** `.table-card` > `table.list`, šedé hlavičky 12 px, celý řádek je klikací (`data-href`), čísla vpravo. Na mobilu se méně důležité sloupce schovají (`.hide-sm`).
-- **Hromadné akce:** zaškrtávací políčka a plovoucí lišta dole uprostřed (`.bulkbar`).
+- **Hromadné akce:** zaškrtávací políčka a plovoucí lišta dole uprostřed (`.bulkbar`): počet vybraných, „Zrušit výběr“, „Smazat…“ (červeně, `.btn.ghost.danger`) a vpravo hlavní akce. Smazání se vždycky potvrdí.
 - **Filtry:** `.toolbar` se segmentovým přepínačem (`.segmented`), výběrem a hledáním.
 - **Stavy:** tečka + text (`.status.paid`, `.overdue`, `.cancelled`).
 - **Formuláře:** mřížka o 6 sloupcích (`.grid`, `.c1`–`.c6`), popisek nad polem, nápověda pod ním (`.hint`). Neuložené změny hlídá `leaveGuard`.

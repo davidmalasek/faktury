@@ -23,6 +23,7 @@ ARCHIV = DATA / "archiv"
 ZALOHY = DATA / "zalohy"
 SMAZANE = DATA / "smazane"
 ZALOHY_POCET = 30
+SMAZANE_ODKAZY = 500  # kolik smazaných faktur z jiných aplikací si Faktury pamatují (viz publish)
 # Kopie dat v iCloud Drive. Zapíná ji jen server.main() – testy a import ji nechávají vypnutou.
 ICLOUD_DEFAULT = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Faktury záloha"
 ICLOUD = None
@@ -78,6 +79,7 @@ def _load():
         raise RuntimeError(f"Soubor {DATA_FILE.name} je poškozený ({e}). "
                            f"Obnov ho z poslední zálohy ve složce data/zalohy.")
     data.setdefault("incomes", [])  # starší data příjmy bez faktury ještě nemají
+    data.setdefault("deleted_links", [])  # ani záznamy o smazaných fakturách z jiných aplikací
     return data
 
 
@@ -152,13 +154,15 @@ def settings_ready(data):
 
 
 def publish(data):
-    """Zveřejní ostatním aplikacím kontakty a stav faktur, které z nich přišly."""
+    """Zveřejní ostatním aplikacím kontakty a stav faktur, které z nich přišly.
+    U smazaných faktur zveřejní, že je někdo smazal (deleted), ať je aplikace, odkud přišly, taky zruší."""
     mejvos.publish_contacts(APP_ID, data["contacts"])
     mejvos.publish(APP_ID, "invoices", [
         {"app": inv["source"]["app"], "ref": inv["source"]["ref"], "id": inv["id"], "number": inv["number"],
          "status": inv["status"], "issue_date": inv["issue_date"], "due_date": inv["due_date"],
          "paid_date": inv["paid_date"], "total": inv["total"]}
-        for inv in data["invoices"] if (inv.get("source") or {}).get("ref")], ready=settings_ready(data))
+        for inv in data["invoices"] if (inv.get("source") or {}).get("ref")], ready=settings_ready(data),
+        deleted=data["deleted_links"])
 
 
 def sync_peers():
@@ -504,9 +508,9 @@ def create_linked_invoice(data, values):
     app, ref = _text(source.get("app")), _text(source.get("ref"))
     if not app or not ref:
         raise ValueError("Chybí, ze které aplikace faktura přišla.")
-    for inv in data["invoices"]:
-        if (inv.get("source") or {}).get("app") == app and inv["source"].get("ref") == ref:
-            return inv
+    inv = _linked(data, app, ref)
+    if inv:
+        return inv
     given = values.get("customer") or {}
     if not _text(given.get("name")):
         raise ValueError("Vyplň odběratele.")
@@ -529,7 +533,33 @@ def create_linked_invoice(data, values):
         "note": values.get("note"),
     })
     inv["source"] = {"app": app, "ref": ref, "name": _text(source.get("name")) or app, "link": _text(source.get("link"))}
+    # Faktura k témuž vyúčtování vznikla znovu, takže už neplatí, že je smazaná.
+    data["deleted_links"] = [d for d in data["deleted_links"] if (d["app"], d["ref"]) != (app, ref)]
     return inv
+
+
+def _linked(data, app, ref):
+    """Faktura, která vznikla z jiné aplikace (source.app + source.ref), nebo None."""
+    return next((inv for inv in data["invoices"]
+                 if (inv.get("source") or {}).get("app") == app and inv["source"].get("ref") == ref), None)
+
+
+def delete_linked_invoice(data, values):
+    """Smaže fakturu, o kterou požádala jiná aplikace (třeba Hodinovka, když vrátí čas mezi nevyfakturovaný).
+    Zaplacenou nesmaže (je to příjem) a stornovanou nechá v evidenci i v číselné řadě."""
+    app, ref = _text(values.get("app")), _text(values.get("ref"))
+    if not app or not ref:
+        raise ValueError("Chybí, ze které aplikace faktura přišla.")
+    inv = _linked(data, app, ref)
+    if inv is None:
+        return {"deleted": False, "status": None}  # už je pryč (třeba po druhém kliknutí)
+    if inv["status"] == "paid":
+        raise ValueError(f"Faktura {inv['number']} je zaplacená, a tak se sama nesmaže. "
+                         f"Když ji chceš opravdu zrušit, smaž ji ve Fakturách.")
+    if inv["status"] == "cancelled":
+        return {"deleted": False, "status": "cancelled", "number": inv["number"]}
+    delete_invoice(data, inv["id"])
+    return {"deleted": True, "status": None, "number": inv["number"]}
 
 
 def set_status(data, iid, status, paid_date=None):
@@ -578,11 +608,33 @@ def attach_original_pdf(data, iid, source):
 
 
 def delete_invoice(data, iid):
-    """Smaže fakturu z evidence. Její PDF se nemaže, jen přesune do data/smazane."""
+    """Smaže fakturu z evidence. Její PDF se nemaže, jen přesune do data/smazane.
+    Faktura z jiné aplikace si to zapamatuje, ať ji zruší i tam (viz publish)."""
     inv = get_invoice(data, iid)
     data["invoices"].remove(inv)
     if inv["pdf_file"]:
         _trash(inv["pdf_file"])
+    source = inv.get("source") or {}
+    if source.get("ref"):
+        data["deleted_links"] = [d for d in data["deleted_links"] if (d["app"], d["ref"]) != (source["app"], source["ref"])]
+        data["deleted_links"].append({"app": source["app"], "ref": source["ref"], "number": inv["number"],
+                                      "deleted_at": mejvos.now()})
+        del data["deleted_links"][:-SMAZANE_ODKAZY]
+
+
+def delete_invoices(data, ids):
+    """Smaže víc faktur najednou. Buď všechny, nebo žádnou (neexistující zabrání uložení)."""
+    try:
+        ids = list(dict.fromkeys(int(i) for i in ids or []))
+    except (TypeError, ValueError):
+        raise ValueError("Neplatná faktura.")
+    if not ids:
+        raise ValueError("Nevybral jsi žádnou fakturu.")
+    for iid in ids:
+        get_invoice(data, iid)
+    for iid in ids:
+        delete_invoice(data, iid)
+    return {"deleted": len(ids)}
 
 
 # ---------- příjmy bez faktury ----------

@@ -351,6 +351,50 @@ class EcosystemTests(TempData):
         published = json.loads((mejvos.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))
         self.assertEqual(published["items"][0]["status"], "paid")
 
+    def test_deleted_linked_invoices_are_published(self):
+        mejvos.ENABLED = True
+        read = lambda: json.loads((mejvos.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))  # noqa: E731
+        with db.open_data(True) as data:
+            inv = db.create_linked_invoice(data, self.linked())
+            own = db.save_invoice(data, invoice("1"))
+        self.assertEqual(read()["deleted"], [])
+        with db.open_data(True) as data:
+            db.delete_invoices(data, [inv["id"], own["id"]])
+        published = read()
+        self.assertEqual(published["items"], [])
+        self.assertEqual([(d["app"], d["ref"], d["number"]) for d in published["deleted"]],
+                         [("hodinovka", "r1", inv["number"])])  # vlastní faktura se nikomu nehlásí
+        with db.open_data(True) as data:  # Hodinovka k témuž vyúčtování vystavila fakturu znovu
+            db.create_linked_invoice(data, self.linked())
+        self.assertEqual((len(read()["items"]), read()["deleted"]), (1, []))
+
+    def test_delete_linked_invoice(self):
+        with db.open_data(True) as data:
+            issued, paid, cancelled = (db.create_linked_invoice(data, self.linked(r)) for r in ("r1", "r2", "r3"))
+            db.set_status(data, paid["id"], "paid")
+            db.set_status(data, cancelled["id"], "cancelled")
+            ask = lambda ref: db.delete_linked_invoice(data, {"app": "hodinovka", "ref": ref})  # noqa: E731
+            self.assertEqual(ask("r1"), {"deleted": True, "status": None, "number": issued["number"]})
+            self.assertEqual(ask("r1"), {"deleted": False, "status": None})  # už je pryč
+            with self.assertRaisesRegex(ValueError, "zaplacená"):
+                ask("r2")
+            self.assertEqual(ask("r3")["status"], "cancelled")  # stornovaná zůstane v číselné řadě
+            self.assertEqual([i["number"] for i in data["invoices"]], [paid["number"], cancelled["number"]])
+            self.assertEqual([d["ref"] for d in data["deleted_links"]], ["r1"])
+
+    def test_delete_many_is_all_or_nothing(self):
+        with db.open_data(True) as data:
+            a = db.save_invoice(data, invoice("1"))
+            db.save_invoice(data, invoice("2"))
+        with self.assertRaises(LookupError), db.open_data(True) as data:
+            db.delete_invoices(data, [a["id"], 999])
+        self.assertEqual(len(self.stored()["invoices"]), 2)
+        with self.assertRaisesRegex(ValueError, "Nevybral"), db.open_data(True) as data:
+            db.delete_invoices(data, [])
+        with db.open_data(True) as data:
+            self.assertEqual(db.delete_invoices(data, [a["id"], str(a["id"])]), {"deleted": 1})
+        self.assertEqual([i["number"] for i in self.stored()["invoices"]], ["2"])
+
     def test_peer_contacts_are_offered_and_linked(self):
         later = mejvos.now()
         self.peer([{"uid": "h1", "name": "Studio Sova", "updated_at": later},
@@ -492,6 +536,11 @@ class ServerTests(TempData):
         self.assertEqual(status, 400)
         self.assertIn("už existuje", body["error"])
         self.assertEqual(self.call("GET", "/api/invoices/999")[0], 404)
+        self.call("POST", "/api/invoices", invoice(f"{YEAR}0002"))
+        self.assertEqual(self.call("POST", "/api/invoices/delete", {"ids": [inv["id"], 999]})[0], 404)
+        self.assertEqual(self.call("POST", "/api/invoices/delete", {"ids": [i["id"] for i in self.stored()["invoices"]]}),
+                         (200, {"deleted": 2}))
+        self.assertEqual(self.stored()["invoices"], [])
 
     def test_income_flow(self):
         status, inc = self.call("POST", "/api/incomes", {"date": f"{YEAR}-05-04", "amount": "12381", "payer": "Pořadatel"})
@@ -531,6 +580,10 @@ class ServerTests(TempData):
         self.assertEqual(self.call("POST", "/api/os/invoices", body)[1]["id"], created["id"])
         self.assertEqual([c["name"] for c in self.call("GET", "/api/os/contacts")[1]], ["Kavárna"])
         self.assertEqual(self.call("GET", "/api/offered")[1], [])
+        gone = {"app": "hodinovka", "ref": "x1"}
+        self.assertEqual(self.call("POST", "/api/os/invoices/delete", gone), (200, {"deleted": True, "status": None, "number": created["number"]}))
+        self.assertEqual(self.call("POST", "/api/os/invoices/delete", gone)[1]["deleted"], False)
+        self.assertEqual(self.stored()["invoices"], [])
         status, _ = self.call("POST", "/api/os/invoices", body, headers={"Origin": "https://evil.example"})
         self.assertEqual(status, 403)
 

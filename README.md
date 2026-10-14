@@ -27,7 +27,7 @@ Hodí se i při podnikání během studia nebo vedle zaměstnání (vedlejší �
 
 ## Co umí
 
-- **Faktury v PDF s QR Platbou.** Číselná řada se vede sama a variabilní symbol se bere z čísla faktury. Fakturu můžeš upravit, duplikovat nebo stornovat (PDF pak dostane vodoznak).
+- **Faktury v PDF s QR Platbou.** Číselná řada se vede sama a variabilní symbol se bere z čísla faktury. Fakturu můžeš upravit, duplikovat nebo stornovat (PDF pak dostane vodoznak). V seznamu jde vybrat víc faktur a najednou je označit jako zaplacené nebo smazat.
 - **Kontakty s načtením z ARES.** Stačí zadat IČO a název s adresou se doplní.
 - **Přehled za rok:** příjmy po měsících, největší odběratelé, co čeká na platbu a co je po splatnosti.
 - **Odhad daně a pojištění** z přijatých plateb a výdajového paušálu.
@@ -44,7 +44,8 @@ Faktury a [Hodinovka](https://github.com/davidmalasek/hodinovka) (měření odpr
 
 - **Kontakty se sdílí.** Klient z Hodinovky se nabídne u nové faktury (a v Kontaktech) a kontakt z Faktur se nabídne v Hodinovce. Jakmile ho jednou použiješ, zůstanou propojené a změny údajů se přenesou do druhé aplikace. Klient z Hodinovky nemusí mít IČO, doplníš ho tady (třeba z ARES).
 - **Faktura za odpracovaný čas.** V Hodinovce vybereš záznamy a dáš Vyfakturovat. Tady se vytvoří faktura s položkami, hodinami a cenami, číslo, splatnost a tvoje údaje doplní Faktury samy. U faktury je odkaz zpátky do Hodinovky.
-- **Stav se vrací.** Hodinovka vidí, jestli je faktura zaplacená nebo stornovaná. Když fakturu smažeš, nabídne vrátit čas mezi nevyfakturovaný.
+- **Stav se vrací.** Hodinovka vidí, jestli je faktura zaplacená nebo stornovaná.
+- **Oběma směry.** Když fakturu z Hodinovky smažeš (i víc najednou), odpracovaný čas se v Hodinovce sám vrátí mezi nevyfakturovaný. A když v Hodinovce vrátíš vyúčtování mezi nevyfakturované, faktura se tady smaže. Zaplacenou fakturu Hodinovka nesmaže a stornovaná tu zůstane kvůli číselné řadě.
 - **Všechno hned.** Otevřené okno se samo obnoví, když se něco změní v druhé aplikaci: faktura z Hodinovky se tu ukáže do pár vteřin, nic nemusíš načítat znovu.
 - Hodinovku nainstaluješ jedním kliknutím v **Nastavení → Propojené aplikace**.
 

@@ -74,11 +74,15 @@ Faktury zveřejňují stav faktur, které vznikly z jiné aplikace:
 ```json
 {"app": "faktury", "ready": true, "items": [
   {"app": "hodinovka", "ref": "…", "id": 12, "number": "20260012", "status": "issued", "issue_date": "…", "due_date": "…", "paid_date": null, "total": 9843.0}
+], "deleted": [
+  {"app": "hodinovka", "ref": "…", "number": "20260011", "deleted_at": "2026-10-14T21:37:00+02:00"}
 ]}
 ```
 
 - `ready` říká, jestli mají Faktury vyplněné údaje dodavatele (jméno, IČO, účet).
-- `status` je `issued`, `paid` nebo `cancelled`. Když faktura se svým `ref` v seznamu chybí, byla smazaná.
+- `status` je `issued`, `paid` nebo `cancelled`.
+- `deleted` jsou faktury, které uživatel smazal (posledních 500). Aplikace, ze které faktura přišla, podle toho zruší svoje vyúčtování, takže je odpracovaný čas zase k vyfakturování. Když se k témuž `ref` vystaví faktura znovu, z `deleted` zmizí.
+- Faktura, která v `items` jen chybí, ale v `deleted` není (třeba po přeinstalování Faktur), se nikde neruší. Aplikace ji jen ukáže jako chybějící.
 
 ## API (`/api/os`)
 
@@ -89,6 +93,7 @@ Každá aplikace má na svém lokálním serveru:
 | `GET /api/os` | všechny | `id`, `name`, `version`, `protocol`, `provides` (Faktury navíc `ready`) |
 | `GET /api/os/contacts` | `contacts` | kontakty ve společném tvaru |
 | `POST /api/os/invoices` | `invoices` | vystaví fakturu, viz níže |
+| `POST /api/os/invoices/delete` | `invoices` | smaže fakturu, která z aplikace přišla, viz níže |
 
 `POST /api/os/invoices` (Faktury):
 
@@ -105,6 +110,13 @@ Každá aplikace má na svém lokálním serveru:
 - **Stejné `source.app` + `source.ref` vrátí už vystavenou fakturu**, takže opakovaný požadavek (třeba po výpadku) nikdy nevytvoří fakturu dvakrát.
 - Odběratel se propojí s kontaktem podle `uid`, pak podle IČO nebo názvu. Když žádný není, uloží se jako nový kontakt (se stejným uid). Poslané údaje mají přednost, chybějící doplní kontakt. Fakturovat jde tedy i na jinou firmu než obvykle.
 - Odpověď: `201` a `{"id", "number", "status", "total", "issue_date", "due_date"}`. Chyba: `400` a `{"error": "text pro uživatele"}`.
+
+`POST /api/os/invoices/delete` (Faktury, od verze 1.4.0) s `{"app": "hodinovka", "ref": "<uid vyúčtování>"}`:
+
+- Nezaplacenou fakturu smaže a odpoví `{"deleted": true, "number": "…"}`.
+- Zaplacenou nesmaže (je to příjem) a odpoví `400` s vysvětlením. Smazat ji jde jen přímo ve Fakturách.
+- Stornovanou nechá v evidenci i v číselné řadě a odpoví `{"deleted": false, "status": "cancelled"}`.
+- Když faktura neexistuje (už je smazaná), odpoví `{"deleted": false, "status": null}`. Opakovaný požadavek tedy nic nerozbije.
 
 Volající aplikace (`mejvos.call`) při nedostupném serveru spustí druhou aplikaci přes `launch` a zkusí to znovu.
 Když je aplikace nainstalovaná, ale ještě nikdy neběžela (manifest chybí), otevře ji (`open -g`) a počká, až se přihlásí.
