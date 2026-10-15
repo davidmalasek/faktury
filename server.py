@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+import dane
 import db
 import mejvos
 import update
@@ -296,6 +297,9 @@ class Handler(BaseHTTPRequestHandler):
                 return db.create_linked_invoice(data, body)
             if rid == "invoices" and sub == "delete" and method == "POST":
                 return db.delete_linked_invoice(data, body)
+
+        elif res == "priznani" and method == "GET":  # připomínka daňového přiznání za minulý rok
+            return dane.tax_return(data)
 
         elif res == "next-number" and method == "GET":
             return {"number": db.next_number(data)}

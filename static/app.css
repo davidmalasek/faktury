@@ -219,6 +219,7 @@ select {
 .alerts { display: grid; gap: 8px; margin-bottom: 16px; }
 .alerts:empty { display: none; }
 .alerts .notice { display: flex; gap: 10px; margin: 0; }
+.alerts .notice > .btn { margin-left: auto; align-self: center; flex: none; }
 .card .alerts { margin: 14px 0 0; }
 .grid > .alerts { margin: 0; }
 .limit-note { font-size: 14px; font-weight: 500; margin: 10px 0 0; }

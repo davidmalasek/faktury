@@ -7,4 +7,5 @@ Fakturace pro živnostníky (neplátce DPH) na Macu. Patří do systému aplikac
 - Bez závislostí: Python 3.9+ jen se standardní knihovnou, čistý JavaScript bez buildu (pdfmake je přibalený). Testy `python3 -m unittest discover tests` musí projít i na Pythonu 3.9.
 - Texty v aplikaci i komentáře v kódu česky, uživateli se tyká.
 - Okno pro macOS (`macos/Faktury.swift`) jde zkompilovat jen na Macu, ověřuje ho GitHub Actions.
+- Pracuj rovnou v `main`, žádné další větve ani pull requesty.
 - Vydání: zvýšit `VERSION` a pushnout do `main`.

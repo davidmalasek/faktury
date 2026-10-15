@@ -32,6 +32,7 @@ Hodí se i při podnikání během studia nebo vedle zaměstnání (vedlejší �
 - **Přehled za rok:** příjmy po měsících, největší odběratelé, co čeká na platbu a co je po splatnosti.
 - **Odhad daně a pojištění** z přijatých plateb a výdajového paušálu.
 - **Hlídání limitů:** obrat pro registraci k DPH a rozhodná částka pro sociální pojištění. Varuje už při psaní faktury, která by limit přetáhla.
+- **Připomínka daňového přiznání** od ledna i s odhadem daně. Až ho podáš, odklikneš ji.
 - **Příjmy bez faktury** (třeba vyúčtování od pořadatele) i s přiloženým dokladem.
 - **Zálohy:** každý den automaticky, po každé změně kopie do iCloud Drive. Smazané PDF se jen přesunou stranou.
 - **Import starých faktur** z JSON souboru i s původními PDF.
@@ -125,7 +126,10 @@ Počítá se jen s příjmy z podnikání. Jiné příjmy (třeba brigáda), sku
 Upozornění jsou nahoře v Přehledu (za letošek), v měřácích a ve formuláři faktury i příjmu, když by částka limit přetáhla.
 Hranice 75 % a 90 % se mění v `static/charts.js` (`LIMIT_WARN`, `LIMIT_BAD`).
 
-> Částky jsou orientační a platí pro roky 2025 a 2026. Daňové přiznání ani přehledy pro pojišťovny appka nevyplní a nenahrazuje účetní ani daňového poradce.
+> Částky jsou orientační a platí pro roky 2025 až 2027. Daňové přiznání ani přehledy pro pojišťovny appka nevyplní a nenahrazuje účetní ani daňového poradce.
+
+**Připomínka daňového přiznání:** od 1. ledna je nahoře v Přehledu, do kdy podat přiznání za minulý rok. Lhůta platí každý rok stejně: elektronicky do 1. 5. (OSVČ má datovou schránku, takže podává elektronicky), a když připadne na víkend nebo svátek, posune se na nejbližší pracovní den. Ve stejné lhůtě se platí daň.
+Měsíc před termínem se připomínka zbarví oranžově, týden před ním červeně. Tlačítkem **Hotovo** ji odklikneš a uloží se to do nastavení (v Nastavení → Podnikání jde vrátit). Ukáže se jen za rok, ve kterém máš nějakou fakturu nebo příjem, a neodkliknutá zmizí 60 dní po termínu.
 
 ## Příjmy bez faktury
 
@@ -164,7 +168,7 @@ Commity bez změny `VERSION` se nikomu neinstalují.
 Ve vývojové kopii z gitu se aktualizace neinstalují, aby nepřepsaly rozdělanou práci.
 
 **Každý rok** je potřeba zkontrolovat sazby a limity na začátku `static/app.js`:
-- doplnit rozhodnou částku pro sociální pojištění do `SOCIAL_LIMITS` (zveřejňuje se na podzim předchozího roku, 2026: 117 521 Kč),
+- doplnit rozhodnou částku pro sociální pojištění do `SOCIAL_LIMITS` (zveřejňuje se na podzim předchozího roku: 2,4násobek průměrné mzdy zaokrouhlený nahoru, 2027: 123 992 Kč),
 - od roku 2027 se má vrátit sleva na studenta 4 020 Kč. Až bude platit, je potřeba ji přičíst k `TAX_CREDIT`.
 
 ## Licence

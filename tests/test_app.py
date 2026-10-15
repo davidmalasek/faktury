@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import dane  # noqa: E402
 import db  # noqa: E402
 import import_data  # noqa: E402
 import mejvos  # noqa: E402
@@ -506,6 +507,34 @@ class UpdateTests(TempData):
         self.assertEqual(len(list(db.ZALOHY.glob("pred-aktualizaci-*.json"))), 1)
 
 
+class TaxReturnTests(TempData):
+    """Připomínka daňového přiznání."""
+
+    def test_deadline_moves_to_workday(self):
+        self.assertEqual(dane.deadline(2025), (date(2026, 4, 1), date(2026, 5, 4)))  # 1. 5. svátek, pak víkend
+        self.assertEqual(dane.deadline(2026), (date(2027, 4, 1), date(2027, 5, 3)))
+        self.assertEqual(dane.deadline(2023), (date(2024, 4, 2), date(2024, 5, 2)))  # 1. 4. 2024 Velikonoční pondělí
+        self.assertEqual(dane.easter(2027), date(2027, 3, 28))
+        self.assertEqual(dane.workday(date(2026, 12, 24)), date(2026, 12, 28))
+
+    def test_reminder_until_filed(self):
+        feb = date(2027, 2, 10)
+        with db.open_data() as data:
+            self.assertFalse(dane.tax_return(data, feb)["show"])  # v roce 2026 nic nebylo
+        with db.open_data(True) as data:
+            db.save_invoice(data, invoice("1", issue="2026-11-02", due="2026-11-16"))
+        with db.open_data() as data:
+            self.assertEqual(dane.tax_return(data, feb), {"year": 2026, "paper": "2027-04-01", "due": "2027-05-03",
+                                                          "filed": False, "show": True})
+            self.assertTrue(dane.tax_return(data, date(2027, 7, 2))["show"])
+            self.assertFalse(dane.tax_return(data, date(2027, 7, 3))["show"])  # 60 dní po termínu už nestraší
+        with db.open_data(True) as data:
+            db.save_settings(data, {"tax_return_filed": "2026"})
+        with db.open_data() as data:
+            self.assertEqual((dane.tax_return(data, feb)["filed"], dane.tax_return(data, feb)["show"]), (True, False))
+            self.assertEqual(dane.tax_return(data, date(2028, 2, 1))["year"], 2027)
+
+
 class ServerTests(TempData):
     def setUp(self):
         super().setUp()
@@ -606,6 +635,12 @@ class ServerTests(TempData):
         self.assertEqual(own, now["rev"])
         EcosystemTests.peer(self, [{"uid": "u1", "name": "Pekárna"}])  # Hodinovka zveřejnila klienty
         self.assertNotEqual(self.call("GET", "/api/rev")[1], now)
+
+    def test_tax_return_reminder(self):
+        status, body = self.call("GET", "/api/priznani")
+        self.assertEqual((status, body["year"], body["filed"]), (200, int(YEAR) - 1, False))
+        self.assertEqual(self.call("PUT", "/api/settings", {"tax_return_filed": int(YEAR) - 1})[0], 200)
+        self.assertTrue(self.call("GET", "/api/priznani")[1]["filed"])
 
     def test_static_files_cannot_escape(self):
         self.assertEqual(self.call("GET", "/../db.py")[0], 404)

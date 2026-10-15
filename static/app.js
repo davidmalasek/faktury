@@ -14,7 +14,7 @@ const VAT_LIMIT = 2000000;
 const VAT_LIMIT_NOW = 2536500;
 // Rozhodná částka pro vedlejší SVČ (ČSSZ): když zisk za rok dosáhne této částky, platí se sociální pojištění.
 // Každý rok doplnit novou hodnotu (zveřejňuje se na podzim předchozího roku).
-const SOCIAL_LIMITS = { 2025: 111736, 2026: 117521 };
+const SOCIAL_LIMITS = { 2025: 111736, 2026: 117521, 2027: 123992 };
 // Daň z příjmů: 15 % ze zisku zaokrouhleného dolů na stovky, minus sleva na poplatníka.
 // Sazba 23 % platí až nad 36násobkem průměrné mzdy (2026: 1 762 812 Kč), s tou se nepočítá.
 // Od roku 2027 se má vrátit sleva na studenta (4 020 Kč) – až bude zákon platit, doplnit ji podle roku.
@@ -272,7 +272,7 @@ function invoiceTable(rows, opts = {}) {
 // ---------- přehled ----------
 
 async function viewDashboard(params) {
-  const [invoices, incomes, settings] = await Promise.all([api('invoices'), api('incomes'), api('settings')]);
+  const [invoices, incomes, settings, taxReturn] = await Promise.all([api('invoices'), api('incomes'), api('settings'), api('priznani')]);
   return () => {
     setTitle('Přehled');
     const today = isoDate();
@@ -320,6 +320,7 @@ async function viewDashboard(params) {
     const turnover = sum(inYear) + sumAmount(incomesInYear);
     const vatLevel = limitLevel(turnover, VAT_LIMIT);
     const alerts = isCurrent ? yearAlerts({ year, turnover, received: receivedIn(year, active, incomesInYear), pending: sum(unpaid), settings }) : [];
+    if (isCurrent && taxReturn.show) alerts.unshift(taxReturnAlert(taxReturn, { active, incomes, settings }));
 
     app.innerHTML = `
       ${missingSettings(settings) ? '<div class="notice">Doplň svoje údaje a číslo účtu v <a href="#/nastaveni">Nastavení</a>.</div>' : ''}
@@ -388,6 +389,12 @@ async function viewDashboard(params) {
       months: byMonth.map((list, m) => ({ value: sum(list), count: list.length, href: `#/faktury?rok=${year}&mesic=${m + 1}` })),
     });
     if (customers.length) barList($('#customers'), customers);
+    const filed = $('[data-filed]');
+    if (filed) filed.onclick = () => attempt(async () => {
+      await api('settings', { method: 'PUT', body: { tax_return_filed: taxReturn.year } });
+      toast('Uloženo, připomínka se už neukáže');
+      router(false);
+    }, filed);
   };
 }
 
@@ -397,10 +404,10 @@ const socialMaxIncome = (limit, rate) => Math.floor((limit - 1) / (1 - rate / 10
 const taxFreeIncome = rate => Math.ceil((Math.floor(TAX_CREDIT / TAX_RATE) * 100 + 100) * 100 / (100 - rate)) - 1;
 const pctLabel = n => String(n).replace('.', ',') + ' %';
 
-/** Varovné hlášky: [{ level: 'warn' | 'bad', label, text }] → seznam barevných upozornění. */
+/** Varovné hlášky: [{ level: 'info' | 'warn' | 'bad', label, text, icon?, action? }] → seznam barevných upozornění. */
 const alertList = alerts => alerts
   .sort((a, b) => (b.level === 'bad') - (a.level === 'bad'))
-  .map(a => `<div class="notice ${a.level}"><span aria-hidden="true">${flag(a.level)}</span><span><b>${a.label}:</b> ${a.text}</span></div>`).join('');
+  .map(a => `<div class="notice ${a.level}"><span aria-hidden="true">${a.icon ?? flag(a.level)}</span><span><b>${a.label}:</b> ${a.text}</span>${a.action || ''}</div>`).join('');
 
 /**
  * Varování na přehledu za letošek: obrat vůči limitu pro DPH (podle data vystavení), přijaté platby
@@ -560,6 +567,31 @@ function duesCard({ year, isCurrent, active, unpaid, incomes, settings }) {
       <p class="hint">Počítají se platby podle data zaplacení${incomes.length ? ` včetně příjmů bez faktury (${Fmt.money0(sumAmount(incomes))})` : ''} a jen příjmy z podnikání, jiné příjmy (třeba brigáda) daň změní.
         ${rate ? `Paušál ${rate} % změníš` : 'Počítá se bez výdajů, takže skutečné částky budou nižší. Paušál nastavíš'} v&nbsp;<a href="#/nastaveni">Nastavení</a>.</p>
     </section>`;
+}
+
+// ---------- daňové přiznání ----------
+
+const TAX_RETURN_MIN = 50000; // do těchto příjmů za rok (a bez jiných příjmů) se přiznání nepodává
+
+/**
+ * Připomínka přiznání za minulý rok (viz dane.py): od 1. 1., dokud ji neodklikneš.
+ * Šedě, měsíc před termínem oranžově, týden před ním a po něm červeně.
+ */
+function taxReturnAlert(t, { active, incomes, settings }) {
+  const year = String(t.year);
+  const received = receivedIn(year, active, incomes.filter(i => i.date.startsWith(year)));
+  const rate = Number(settings.expense_rate) || 0;
+  const { tax } = yearlyDues(received, rate, settings.side_activity ? SOCIAL_LIMITS[year] : 0);
+  const days = daysBetween(isoDate(), t.due);
+  const when = days > 1 ? `za ${plural(days, 'den', 'dny', 'dní')}` : days === 1 ? 'zítra' : days === 0 ? 'dnes je poslední den'
+    : `už ${plural(-days, 'den', 'dny', 'dní')} po termínu`;
+  const level = days <= 7 ? 'bad' : days <= 30 ? 'warn' : 'info';
+  return {
+    level, icon: level === 'info' ? '📅' : undefined, label: `Daňové přiznání za rok ${year}`,
+    text: `podej ho elektronicky do ${Fmt.date(t.due)} (${when}). Daň podle Faktur vychází na ${Fmt.money0(tax)}${tax ? ', zaplať ji do stejného dne' : ''}.`
+      + (received <= TAX_RETURN_MIN ? ` Při příjmech do ${Fmt.money0(TAX_RETURN_MIN)} za rok (a bez jiných příjmů) ho podávat nemusíš.` : ''),
+    action: '<button type="button" class="btn" data-filed>Hotovo</button>',
+  };
 }
 
 // ---------- faktury: seznam ----------
@@ -1254,6 +1286,7 @@ async function viewContactForm(params, id) {
 
 async function viewSettings() {
   const [s, cloud, peers] = await Promise.all([api('settings'), api('zaloha'), api('peers').catch(() => null)]);
+  const taxYear = new Date().getFullYear() - 1; // přiznání se podává za minulý rok
   return () => {
     setTitle('Nastavení');
     let dirty = false;
@@ -1287,6 +1320,10 @@ async function viewSettings() {
               <span class="hint">Přehled pak hlídá limit, do kterého se neplatí sociální pojištění. Když vedlejší činnost netrvá celý rok (dostuduješ, dovršíš 26 let), limit se poměrně krátí.</span>
             </div>
             <label class="c3">Výdajový paušál<select name="expense_rate">${EXPENSE_RATES.map(([v, t]) => `<option value="${v}" ${Number(s.expense_rate) === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+            <div class="c6">
+              <label class="check"><input type="checkbox" name="tax_return_filed" ${Number(s.tax_return_filed) === taxYear ? 'checked' : ''}> Daňové přiznání za rok ${taxYear} mám podané</label>
+              <span class="hint">Od ledna Přehled připomíná, do kdy přiznání za minulý rok podat. Když je podané, připomínka zmizí.</span>
+            </div>
           </div>
         </section>
         <section class="card">
@@ -1340,6 +1377,7 @@ async function viewSettings() {
       const v = Object.fromEntries(new FormData(form));
       v.iban = czIban(v.account);
       v.side_activity = form.elements.side_activity.checked;
+      v.tax_return_filed = form.elements.tax_return_filed.checked ? taxYear : 0;
       return v;
     };
     const hint = $('#iban-hint');

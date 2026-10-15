@@ -45,6 +45,7 @@ DEFAULT_SETTINGS = {
     "due_days": 14,
     "side_activity": True,  # vedlejší činnost (student) – přehled hlídá limit pro sociální pojištění
     "expense_rate": 60,     # výdajový paušál v %, 0 = skutečné výdaje
+    "tax_return_filed": 0,  # rok, za který je daňové přiznání podané (odkliknutá připomínka, viz dane.py)
 }
 EXPENSE_RATES = (80, 60, 40, 0)
 # Údaje dodavatele, které se při vystavení „zmrazí“ do faktury.
