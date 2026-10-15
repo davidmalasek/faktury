@@ -2,6 +2,7 @@
 
 MejvOS je skupina malých aplikací pro Mac, které o sobě vědí a spolupracují: **Faktury**, **Hodinovka** a další, které přibudou.
 Každá aplikace funguje i sama. Když jsou na Macu dvě, najdou se a propojí se bez nastavování.
+Název MejvOS je jen vnitřní (sdílená složka a kód). Uživatel ho nikde nevidí: pro něj jsou to prostě aplikace, které spolu spolupracují.
 
 Tenhle soubor je stejný ve všech repozitářích systému. Kdo píše novou aplikaci, řídí se jím.
 

@@ -5,172 +5,56 @@
 <h1 align="center">Faktury</h1>
 
 <p align="center">
-  Jednoduchá fakturace pro živnostníky, kteří nejsou plátci DPH.<br>
-  Běží na tvém Macu a data zůstávají u tebe. Bez účtu, bez předplatného a bez limitu faktur nebo kontaktů.
+  Fakturace pro živnostníky, kteří nejsou plátci DPH.<br>
+  Fakturu vystavíš za minutu a vždycky víš, kolik ti zůstane po dani a pojištění.
+</p>
+
+<p align="center">
+  <a href="https://github.com/davidmalasek/faktury/releases/latest/download/Faktury.zip"><b>Stáhnout pro Mac</b></a>
 </p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/prehled-dark.png">
   <img src="docs/prehled-light.png" alt="Přehled za rok: fakturace po měsících, odběratelé, odhad daně a pojištění a limit pro DPH">
 </picture>
-<p align="center"><sub>Přehled s ukázkovými daty</sub></p>
 
-## Pro koho to je
+Pro živnostníky a svobodná povolání v Česku, kteří daň počítají výdajovým paušálem. Hodí se i na podnikání při studiu nebo vedle zaměstnání.
 
-Pro OSVČ v Česku (živnostníky i svobodná povolání), kteří:
+## Co za tebe vyřeší
 
-- **nejsou plátci DPH**,
-- počítají daň s **výdajovým paušálem** (nebo výdaje neřeší),
-- chtějí vystavit fakturu za minutu a mít přehled, kolik zaplatí na dani a pojištění.
+- **Faktura za minutu.** Napíšeš IČO odběratele a jeho název s adresou se doplní sám. Číslo faktury i QR kód pro platbu doplní Faktury a hotové PDF jen pošleš.
+- **Víš, kolik zaplatíš.** Průběžně vidíš, kolik za rok zaplatíš na dani a pojištění, a v lednu ti Faktury připomenou daňové přiznání.
+- **Nepřetáhneš limity.** Faktury hlídají hranici pro DPH a u podnikání při studiu nebo zaměstnání i hranici, do které neplatíš sociální pojištění. Upozorní tě už u faktury, která by ji přetáhla.
+- **Nic ti neuteče.** Vidíš, kdo ještě nezaplatil a komu už prošla splatnost.
+- **Měříš odpracovaný čas?** S [Hodinovkou](https://github.com/davidmalasek/hodinovka) ho vyfakturuješ jedním kliknutím.
 
-Hodí se i při podnikání během studia nebo vedle zaměstnání (vedlejší činnost). Appka hlídá limit, do kterého se neplatí sociální pojištění.
-
-## Co umí
-
-- **Faktury v PDF s QR Platbou.** Číselná řada se vede sama a variabilní symbol se bere z čísla faktury. Fakturu můžeš upravit, duplikovat nebo stornovat (PDF pak dostane vodoznak). V seznamu jde vybrat víc faktur a najednou je označit jako zaplacené nebo smazat.
-- **Kontakty s načtením z ARES.** Stačí zadat IČO a název s adresou se doplní.
-- **Přehled za rok:** příjmy po měsících, největší odběratelé, co čeká na platbu a co je po splatnosti.
-- **Odhad daně a pojištění** z přijatých plateb a výdajového paušálu.
-- **Hlídání limitů:** obrat pro registraci k DPH a rozhodná částka pro sociální pojištění. Varuje už při psaní faktury, která by limit přetáhla.
-- **Připomínka daňového přiznání** od ledna i s odhadem daně. Až ho podáš, odklikneš ji.
-- **Příjmy bez faktury** (třeba vyúčtování od pořadatele) i s přiloženým dokladem.
-- **Zálohy:** každý den automaticky, po každé změně kopie do iCloud Drive. Smazané PDF se jen přesunou stranou.
-- **Import starých faktur** z JSON souboru i s původními PDF.
-
-Faktury jsou v korunách a appka je česky.
-
-## Propojení s Hodinovkou
-
-Faktury a [Hodinovka](https://github.com/davidmalasek/hodinovka) (měření odpracovaného času) patří do jednoho systému aplikací **MejvOS**. Když jsou na Macu obě, najdou se samy a nic se nenastavuje:
-
-- **Kontakty se sdílí.** Klient z Hodinovky se nabídne u nové faktury (a v Kontaktech) a kontakt z Faktur se nabídne v Hodinovce. Jakmile ho jednou použiješ, zůstanou propojené a změny údajů se přenesou do druhé aplikace. Klient z Hodinovky nemusí mít IČO, doplníš ho tady (třeba z ARES).
-- **Faktura za odpracovaný čas.** V Hodinovce vybereš záznamy a dáš Vyfakturovat. Tady se vytvoří faktura s položkami, hodinami a cenami, číslo, splatnost a tvoje údaje doplní Faktury samy. U faktury je odkaz zpátky do Hodinovky.
-- **Stav se vrací.** Hodinovka vidí, jestli je faktura zaplacená nebo stornovaná.
-- **Oběma směry.** Když fakturu z Hodinovky smažeš (i víc najednou), odpracovaný čas se v Hodinovce sám vrátí mezi nevyfakturovaný. A když v Hodinovce vrátíš vyúčtování mezi nevyfakturované, faktura se tady smaže. Zaplacenou fakturu Hodinovka nesmaže a stornovaná tu zůstane kvůli číselné řadě.
-- **Všechno hned.** Otevřené okno se samo obnoví, když se něco změní v druhé aplikaci: faktura z Hodinovky se tu ukáže do pár vteřin, nic nemusíš načítat znovu.
-- Hodinovku nainstaluješ jedním kliknutím v **Nastavení → Propojené aplikace**.
-
-Je jedno, kterou aplikaci si stáhneš dřív. Obě v sobě nesou to, co k propojení potřebují. Jak to funguje uvnitř, popisuje [docs/mejvos.md](docs/mejvos.md).
-
-## Požadavky
-
-- **Mac s macOS 12 nebo novějším** (Apple Silicon i Intel). Okno aplikace, záloha do iCloudu i tlačítko „Ukázat ve Finderu“ jsou psané pro Mac.
-- **Internet** pro načítání firem z ARES a pro aktualizace. Když na Macu není Python, Faktury si při prvním spuštění stáhnou vlastní (asi 25 MB).
-
-Nic dalšího instalovat nemusíš.
+Bez účtu, bez předplatného a bez omezení počtu faktur.
 
 ## Instalace
 
-1. Stáhni **[Faktury.zip](https://github.com/davidmalasek/faktury/releases/latest/download/Faktury.zip)**. Safari ZIP samo rozbalí, jinak na něj dvakrát klikni.
-2. Přetáhni **Faktury** do složky **Aplikace**.
-3. Otevři Faktury. Napoprvé je macOS nepustí a napíše, že aplikaci nemůže ověřit. Je to proto, že appka není placeně podepsaná u Applu.
-   Klikni na **Hotovo**, otevři **Nastavení systému → Soukromí a zabezpečení**, sjeď dolů a u hlášky o Fakturách klikni na **Přesto otevřít** a potvrď. Tohle je potřeba jen jednou.
+Potřebuješ Mac s macOS 12 nebo novějším.
 
-Když na Macu není Python, Faktury si ho při prvním otevření stáhnou, takže chvíli trvá, než naběhnou. Pak se macOS zeptá, jestli smí přistupovat k iCloud Drive kvůli záloze. Klikni na **Povolit**.
-Když omylem zakážeš: Nastavení systému → Soukromí a zabezpečení → Soubory a složky → Faktury.
+1. Stáhni **[Faktury.zip](https://github.com/davidmalasek/faktury/releases/latest/download/Faktury.zip)**. Safari ho samo rozbalí, jinak na něj dvakrát klikni.
+2. Přetáhni **Faktury** do složky **Aplikace** a otevři je.
+3. Napoprvé macOS napíše, že aplikaci nemůže ověřit, protože není placeně podepsaná u Applu. Klikni na **Hotovo**, otevři **Nastavení systému → Soukromí a zabezpečení**, sjeď dolů a u Faktur klikni na **Přesto otevřít**. Tohle je potřeba jen jednou.
 
-Faktury se otevřou ve vlastním okně. Najdeš je přes Spotlight (⌘ mezerník → „Faktury“) nebo v Launchpadu a můžeš si je nechat v Docku.
-PDF faktur a zálohu dat uložíš přes běžný dialog, velikost stránky změníš ⌘+ a ⌘−.
+Při prvním otevření se Faktury chvíli připravují. Když se macOS zeptá na přístup k iCloud Drive, klikni na **Povolit**, ať se ti tam data zálohují.
+Pak v **Nastavení** vyplň svoje údaje, číslo účtu a výdajový paušál a můžeš fakturovat.
 
-Než vystavíš první fakturu, vyplň v **Nastavení** svoje údaje, číslo účtu a výdajový paušál.
+Nové verze se instalují samy.
 
-Server Faktur běží na pozadí i po zavření okna, takže další otevření je hned. Dokud běží, appka funguje i v prohlížeči na adrese http://localhost:8765.
+## Tvoje data
 
-## Aktualizace
-
-Faktury se při každém otevření podívají na GitHub, jestli nevyšla nová verze. Když ano, samy ji stáhnou a nainstalují. Trvá to pár vteřin a pak se stránka sama načte znovu.
-Před aktualizací se data zazálohují a data aktualizace nikdy nepřepíše. Kterou verzi máš, uvidíš v **Nastavení** dole.
-
-Aktualizace mění jen soubory ve složce Faktur, ne samotnou aplikaci, takže se macOS na nic znovu neptá.
-Výjimečně se změní i okno aplikace. Pak se stáhne nová Faktury.app a appku je potřeba zavřít a otevřít. macOS se potom může jednou znovu zeptat na iCloud Drive.
-
-## Soukromí
-
-Appka nemá žádný vlastní server ani účet a nic nikam neposílá. Data leží jen ve složce `data` u tebe na disku a v kopii na tvém iCloud Drive.
-Ven jde jen dotaz do veřejného registru ARES, když načítáš firmu podle IČO, a dotaz na GitHub, jestli nevyšla nová verze. S Hodinovkou si data předávají jen tady na Macu.
-Appka poslouchá jen na `127.0.0.1`, takže se k ní nedostane nikdo jiný ze sítě.
-
-## Kde jsou data
-
-Data jsou ve složce `~/Library/Application Support/Faktury/data` (ve vývojové instalaci ve složce `data` projektu). Přesnou cestu najdeš v Nastavení.
-
-| Cesta | Co obsahuje |
-|---|---|
-| `data/faktury.json` | faktury, kontakty, nastavení (čitelný text) |
-| `data/archiv/ROK/` | PDF všech faktur a doklady k příjmům bez faktury |
-| `data/zalohy/` | automatická záloha před první změnou každého dne (30 dní) a před každým importem a aktualizací |
-| `data/smazane/` | PDF smazaných faktur a dokladů (nic se nemaže natrvalo) |
-| iCloud Drive → `Faktury záloha` | kopie všeho výše, aktualizuje se po každé změně |
-| `~/Library/Application Support/MejvOS` | co si Faktury a Hodinovka navzájem ukazují (kontakty, stav faktur z Hodinovky) |
-
-Složka `data` se do gitu záměrně neukládá, protože obsahuje osobní údaje klientů.
-Stav zálohy do iCloudu je vidět v Nastavení. Z iCloudu se nic nemaže, kromě denních záloh starších než 30 dní.
-
-**Obnovení:** zavři okno Faktur, vypni server (v Terminálu `kill $(cat ~/Library/Application\ Support/Faktury/data/server.pid)`) a jedním z těchto způsobů vrať soubor `data/faktury.json`:
-- zkopíruj na jeho místo vybraný soubor z `data/zalohy`,
-- nebo celý obsah složky `Faktury záloha` z iCloud Drive zkopíruj do `data/`.
+Faktury, kontakty i PDF máš jen u sebe na Macu. Každý den se zálohují a po každé změně se kopie uloží do tvého iCloud Drive (složka **Faktury záloha**).
+Faktury nemají žádný účet a nic nikam neposílají. Na internet se ptají jen registru firem ARES, když hledáš odběratele podle IČO, a jestli nevyšla nová verze.
 
 ## Daň a pojištění
 
-Přehled ukazuje, kolik za vybraný rok zaplatíš v dalším roce: daň z příjmů a u vedlejší činnosti i zdravotní a sociální pojištění (částka může vyjít i 0 Kč).
-Zisk se počítá jako přijaté platby (včetně příjmů bez faktury) minus výdajový paušál a paušál se nastavuje v Nastavení.
+Odhad počítá s výdajovým paušálem a s příjmy z podnikání (i s penězi, které ti přišly bez faktury) a platí pro roky 2025 až 2027.
+Je orientační: daňové přiznání za tebe nevyplní a nenahrazuje účetní. Jak přesně počítá, najdeš v [docs/dane.md](docs/dane.md).
 
-- **Daň:** 15 % ze zisku zaokrouhleného dolů na stovky minus sleva na poplatníka (30 840 Kč).
-- **Zdravotní pojištění:** 13,5 % z poloviny zisku. Při studiu nebo zaměstnání se od roku 2026 neplatí zálohy a celé pojistné se doplácí po podání přehledu.
-- **Sociální pojištění:** 29,2 % z 55 % zisku, ale jen když zisk za rok dosáhne rozhodné částky. Měřák v kartě hlídá, kolik ještě můžeš přijmout.
-- **DPH:** když obrat za kalendářní rok přesáhne 2 000 000 Kč, budeš plátce od 1. 1. dalšího roku. Nad 2 536 500 Kč hned ode dne po překročení.
+## Pro vývojáře
 
-Počítá se jen s příjmy z podnikání. Jiné příjmy (třeba brigáda), skutečné výdaje a sazba daně 23 % pro velmi vysoké příjmy se nezohledňují.
+Jak Faktury fungují uvnitř a jak na nich pracovat, popisuje [docs/vyvoj.md](docs/vyvoj.md).
 
-**Varování u limitů:** u DPH, sociálního pojištění a hranice, kterou ještě pokryje sleva na dani, appka ukazuje ✅ / ⚠️ (od 75 %) / 🔴 (od 90 %, po překročení nebo když by limit přetáhly čekající platby).
-Upozornění jsou nahoře v Přehledu (za letošek), v měřácích a ve formuláři faktury i příjmu, když by částka limit přetáhla.
-Hranice 75 % a 90 % se mění v `static/charts.js` (`LIMIT_WARN`, `LIMIT_BAD`).
-
-> Částky jsou orientační a platí pro roky 2025 až 2027. Daňové přiznání ani přehledy pro pojišťovny appka nevyplní a nenahrazuje účetní ani daňového poradce.
-
-**Připomínka daňového přiznání:** od 1. ledna je nahoře v Přehledu, do kdy podat přiznání za minulý rok. Lhůta platí každý rok stejně: elektronicky do 1. 5. (OSVČ má datovou schránku, takže podává elektronicky), a když připadne na víkend nebo svátek, posune se na nejbližší pracovní den. Ve stejné lhůtě se platí daň.
-Měsíc před termínem se připomínka zbarví oranžově, týden před ním červeně. Tlačítkem **Hotovo** ji odklikneš a uloží se to do nastavení (v Nastavení → Podnikání jde vrátit). Ukáže se jen za rok, ve kterém máš nějakou fakturu nebo příjem, a neodkliknutá zmizí 60 dní po termínu.
-
-## Příjmy bez faktury
-
-Peníze, které ti přišly bez vystavené faktury (třeba vyúčtování od pořadatele), zapíšeš přes Faktury → **Příjem bez faktury**.
-Vyplníš datum přijetí, částku a od koho peníze přišly. Volitelně přiložíš doklad (PDF, PNG nebo JPG).
-Takový příjem se nepočítá do číselné řady faktur, ale započítá se do daně a pojištění i do obratu pro DPH.
-V Přehledu je vidět v tabulce za daný rok a kliknutím ho upravíš nebo smažeš.
-
-## Pro vývoj
-
-Vývojová instalace běží přímo ze složky projektu a data má v její podsložce `data`.
-Potřebuje Python 3.9+ a vývojářské nástroje od Applu (`xcode-select --install`), ze kterých se sestaví okno aplikace:
-
-```sh
-git clone https://github.com/davidmalasek/faktury && cd faktury
-./instalovat.sh                           # sestaví Faktury.app do Aplikací (spouští Faktury z této složky)
-python3 server.py --open                  # ruční spuštění v prohlížeči
-python3 -m unittest discover tests        # testy
-python3 import_data.py soubor.json --zkouska   # import starých dat (formát popsán v souboru)
-```
-
-Bez závislostí: backend na standardní knihovně Pythonu a frontend v čistém JavaScriptu.
-PDF vytváří knihovna pdfmake, přibalená ve `static/vendor`.
-Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`, a do systému MejvOS se přihlásí, jen když nastavíš `MEJVOS_DIR`.
-Vzhled i technika jsou společné pro všechny aplikace systému a popisuje je [docs/styl.md](docs/styl.md).
-Propojení s ostatními aplikacemi je v `mejvos.py`. Ten soubor je stejný ve všech aplikacích systému, takže když ho měníš, změň ho i v Hodinovce.
-
-Okno aplikace je v `macos/Faktury.swift` (AppKit a WebKit) a sestavuje ho `macos/sestavit.sh`, a to ve dvou podobách.
-Vývojová podoba (`instalovat.sh`) spouští Faktury ze složky projektu. Podoba ke stažení (`Faktury.zip` z GitHub Actions) nese kód v sobě a při spuštění ho nakopíruje do `~/Library/Application Support/Faktury`.
-Použije Python 3.9+, který na Macu už je (Homebrew, vývojářské nástroje od Applu). Když žádný není, stáhne si do stejné složky Python z [python-build-standalone](https://github.com/astral-sh/python-build-standalone) (verze a kontrolní součty jsou v `spustit.sh`).
-Po změně `macos/` nebo přesunutí složky projektu spusť `./instalovat.sh` znovu.
-
-**Vydání nové verze:** zvyš číslo v souboru `VERSION` (třeba z `1.0.0` na `1.1.0`) a pushni do `main`.
-Když projdou testy a zkouška aplikace na macOS, GitHub Actions vytvoří vydání `v1.1.0` s `Faktury.zip` a seznamem commitů od minulé verze. Ostatním se pak nová verze nainstaluje při dalším otevření Faktur.
-Commity bez změny `VERSION` se nikomu neinstalují.
-Ve vývojové kopii z gitu se aktualizace neinstalují, aby nepřepsaly rozdělanou práci.
-
-**Každý rok** je potřeba zkontrolovat sazby a limity na začátku `static/app.js`:
-- doplnit rozhodnou částku pro sociální pojištění do `SOCIAL_LIMITS` (zveřejňuje se na podzim předchozího roku: 2,4násobek průměrné mzdy zaokrouhlený nahoru, 2027: 123 992 Kč),
-- od roku 2027 se má vrátit sleva na studenta 4 020 Kč. Až bude platit, je potřeba ji přičíst k `TAX_CREDIT`.
-
-## Licence
-
-[MIT](LICENSE). Přibalená knihovna [pdfmake](https://github.com/bpampuch/pdfmake) je pod licencí MIT a písmo Roboto pod licencí Apache 2.0.
+Licence [MIT](LICENSE). Přibalená knihovna [pdfmake](https://github.com/bpampuch/pdfmake) je pod licencí MIT a písmo Roboto pod licencí Apache 2.0.

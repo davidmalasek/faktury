@@ -922,7 +922,7 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
           ${field('E-mail', 'data-c="email" spellcheck="false"', c.email, { cls: 'c2', type: 'email' })}
           ${field('Stát (jen pokud není ČR)', 'data-c="country"', c.country, { cls: 'c2' })}
         </div>
-        <p class="hint">${state.peer ? `Klient z aplikace ${esc(state.peer.app_name)} – doplň, co chybí (třeba IČO z ARES). Uloží se do kontaktů a zůstane s ním propojený.` : 'Nový odběratel se zároveň uloží do kontaktů.'}</p>`;
+        <p class="hint">${state.peer ? `Klient z aplikace ${esc(state.peer.app_name)} – doplň, co chybí (třeba IČO z ARES). Uloží se do kontaktů.` : 'Nový odběratel se zároveň uloží do kontaktů.'}</p>`;
       $$('[data-c]', box).forEach(el => (el.oninput = () => (state.customer[el.dataset.c] = el.value)));
       $('[data-ares]', box).onclick = e => attempt(async () => {
         Object.assign(state.customer, await loadAres(state.customer.ico));
@@ -1242,7 +1242,7 @@ async function viewContactForm(params, id) {
           ${field('Stát (jen pokud není ČR)', 'name="country"', contact.country, { cls: 'c2' })}
           <label class="c6">Poznámka (jen pro tebe, na faktuře není)<textarea name="note" rows="2">${esc(contact.note)}</textarea></label>
         </div>
-        ${!id && contact.uid ? `<input type="hidden" name="uid" value="${esc(contact.uid)}"><p class="hint">Klient z aplikace ${esc(contact.app_name)}. Zůstane s ní propojený, takže se změny údajů přenesou i tam.</p>` : ''}
+        ${!id && contact.uid ? `<input type="hidden" name="uid" value="${esc(contact.uid)}"><p class="hint">Klient z aplikace ${esc(contact.app_name)}.</p>` : ''}
         <div class="form-actions" style="margin-top:20px">
           ${id ? '<button type="button" class="btn ghost danger" id="delete" style="margin-right:auto">Smazat kontakt…</button>' : ''}
           <button type="submit" class="btn primary">Uložit</button>
@@ -1349,8 +1349,8 @@ async function viewSettings() {
       <div id="preview-box"></div>
       <section class="card" style="margin-top:32px">
         <h2>Data a zálohy</h2>
-        <p style="margin-top:0">Všechno je ve složce <b>${esc(cloud.data)}</b>: <b>faktury.json</b> (faktury, kontakty, nastavení) a <b>archiv</b> (PDF všech faktur).
-        Před první změnou každého dne se uloží kopie do <b>zalohy</b> (posledních 30 dní).</p>
+        <p style="margin-top:0">Faktury, kontakty i PDF máš jen u sebe na Macu ve složce <b>${esc(cloud.data)}</b>.
+        Každý den se zálohují do její podsložky <b>zalohy</b> (posledních 30 dní).</p>
         ${cloudStatus(cloud)}
         <a class="btn" href="/api/export" download>Stáhnout zálohu dat</a>
       </section>
@@ -1443,7 +1443,7 @@ function peersCard(peers) {
   return `
     <section class="card">
       <h2>Propojené aplikace</h2>
-      <p style="margin-top:0">Faktury patří do systému <b>${esc(peers.system)}</b>. Aplikace na tomhle Macu se najdou samy a sdílí kontakty – třeba z Hodinovky jde odpracovaný čas vyfakturovat jedním kliknutím.</p>
+      <p style="margin-top:0">Faktury spolupracují s dalšími aplikacemi na tvém Macu, stačí je mít nainstalované. Třeba z Hodinovky vyfakturuješ odpracovaný čas jedním kliknutím.</p>
       <div class="apps">${peers.apps.map(a => `
         <div class="app-row">
           ${appIcon(a.id, 36)}

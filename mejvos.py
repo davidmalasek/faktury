@@ -416,4 +416,4 @@ def overview(exclude):
             "web": entry.get("web"),
             "download": entry.get("download"),
         })
-    return {"system": NAME, "apps": out}
+    return {"apps": out}

@@ -9,6 +9,7 @@ Tenhle soubor je stejný ve všech repozitářích.
 - **Žádné přehlcení čísly.** Přehled = 4 karty s čísly nahoře, pod nimi nejvýš pár grafů a tabulek. Detaily až po kliknutí.
 - **Nic nesmí spadnout.** Neplatný vstup hlásí srozumitelnou větou (toast), při chybě se neuloží nic, data se zálohují. Co jde odvodit, appka předvyplní, ale uživatel to vždycky může přepsat.
 - **Česky a lidsky.** Tykání, krátké věty, žádný technický žargon („Server Faktur neběží – stiskni ⌘R“). Správné tvary čísel (1 záznam, 2 záznamy, 5 záznamů), pevná mezera v částkách (`12 500 Kč`), datum `14. 10. 2026`.
+- **Pro běžné lidi.** Texty v aplikaci i README jsou pro člověka, který má jen Mac a neprogramuje. Říkají, jak mu aplikace vyřeší jeho problém, ne výčet funkcí. Samozřejmosti se nevyjmenovávají (aplikace spolu prostě spolupracují, co se smaže v jedné, zmizí i v druhé). Vnitřní názvy jako MejvOS, server, JSON nebo Python uživatel nevidí, technické podrobnosti patří do `docs/`.
 - **Data jsou u uživatele.** Žádný účet ani cloud. Data v čitelném JSON, denní zálohy, kopie do iCloud Drive.
 
 ## Vzhled
