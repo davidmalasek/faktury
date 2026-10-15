@@ -6,7 +6,8 @@
 
 <p align="center">
   Fakturace pro živnostníky, kteří nejsou plátci DPH.<br>
-  Fakturu vystavíš za minutu a vždycky víš, kolik ti zůstane po dani a pojištění.
+  Fakturu vystavíš za minutu a vždycky víš, kolik ti zůstane po dani a pojištění.<br>
+  <b>Celé zdarma</b>, bez předplatného a bez placené verze.
 </p>
 
 <p align="center">
@@ -20,6 +21,11 @@
 
 Pro živnostníky a svobodná povolání v Česku, kteří daň počítají výdajovým paušálem. Hodí se i na podnikání při studiu nebo vedle zaměstnání.
 
+## Zdarma, bez háčku
+
+Fakturační služby většinou chtějí platit každý měsíc, nebo to podstatné schovají za placenou verzi a omezí, kolik faktur vystavíš.
+Faktury jsou celé zdarma: žádné předplatné, žádná placená verze, žádné limity a ani účet si nezakládáš.
+
 ## Co za tebe vyřeší
 
 - **Faktura za minutu.** Napíšeš IČO odběratele a jeho název s adresou se doplní sám. Číslo faktury i QR kód pro platbu doplní Faktury a hotové PDF jen pošleš.
@@ -27,8 +33,6 @@ Pro živnostníky a svobodná povolání v Česku, kteří daň počítají výd
 - **Nepřetáhneš limity.** Faktury hlídají hranici pro DPH a u podnikání při studiu nebo zaměstnání i hranici, do které neplatíš sociální pojištění. Upozorní tě už u faktury, která by ji přetáhla.
 - **Nic ti neuteče.** Vidíš, kdo ještě nezaplatil a komu už prošla splatnost.
 - **Měříš odpracovaný čas?** S [Hodinovkou](https://github.com/davidmalasek/hodinovka) ho vyfakturuješ jedním kliknutím.
-
-Bez účtu, bez předplatného a bez omezení počtu faktur.
 
 ## Instalace
 
