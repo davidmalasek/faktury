@@ -28,6 +28,8 @@ const HEALTH_RATE = 13.5;
 // 55 % z rozhodné částky odpovídá minimálnímu vyměřovacímu základu, takže minimum se prakticky neuplatní.
 const SOCIAL_RATE = 29.2;
 const SOCIAL_BASE = 55;
+// Podrobný popis výpočtu, Přehled ukazuje jen čísla.
+const TAX_HELP_URL = 'https://github.com/davidmalasek/faktury/blob/main/docs/dane.md';
 const EXPENSE_RATES = [
   [80, '80 % – řemeslné živnosti'],
   [60, '60 % – ostatní živnosti'],
@@ -288,7 +290,9 @@ async function viewDashboard(params) {
     const unpaid = active.filter(i => i.status === 'issued');
     const overdue = unpaid.filter(i => i.due_date < today);
     const byMonth = Array.from({ length: 12 }, (_, m) => inYear.filter(i => Number(i.issue_date.slice(5, 7)) === m + 1));
-    const monthsSoFar = isCurrent ? thisMonth + 1 : 12;
+    // Příjmy = peníze, které za rok opravdu přišly (stejné číslo, ze kterého se počítá daň).
+    const paidInYear = active.filter(i => i.status === 'paid' && (i.paid_date || '').startsWith(year));
+    const received = receivedIn(year, active, incomesInYear);
 
     if (!invoices.length && !incomes.length) {
       app.innerHTML = `
@@ -314,12 +318,12 @@ async function viewDashboard(params) {
 
     const yearRows = years.slice().reverse().map(y => {
       const list = active.filter(i => i.issue_date.startsWith(y));
-      return { y, count: list.length, total: sum(list), paid: sum(list.filter(i => i.status === 'paid')), other: sumAmount(incomes.filter(i => i.date.startsWith(y))) };
+      return { y, count: list.length, total: sum(list), received: receivedIn(y, active, incomes.filter(i => i.date.startsWith(y))) };
     });
 
     const turnover = sum(inYear) + sumAmount(incomesInYear);
     const vatLevel = limitLevel(turnover, VAT_LIMIT);
-    const alerts = isCurrent ? yearAlerts({ year, turnover, received: receivedIn(year, active, incomesInYear), pending: sum(unpaid), settings }) : [];
+    const alerts = isCurrent ? yearAlerts({ year, turnover, received, pending: sum(unpaid), settings }) : [];
     if (isCurrent && taxReturn.show) alerts.unshift(taxReturnAlert(taxReturn, { active, incomes, settings }));
 
     app.innerHTML = `
@@ -331,9 +335,9 @@ async function viewDashboard(params) {
       ${alerts.length ? `<div class="alerts">${alertList(alerts)}</div>` : ''}
       <div class="kpis">
         <div class="kpi"><div class="k">Vyfakturováno ${isCurrent ? 'letos' : `v roce ${year}`}</div><div class="v">${Fmt.money0(sum(inYear))}</div><div class="d">${plural(inYear.length, 'faktura', 'faktury', 'faktur')}</div></div>
-        ${isCurrent
-          ? `<a class="kpi" href="#/faktury?rok=${year}&mesic=${thisMonth + 1}"><div class="k">${capitalize(MONTHS[thisMonth])}</div><div class="v">${Fmt.money0(sum(byMonth[thisMonth]))}</div><div class="d">${plural(byMonth[thisMonth].length, 'faktura', 'faktury', 'faktur')}</div></a>`
-          : `<div class="kpi"><div class="k">Průměrně za měsíc</div><div class="v">${Fmt.money0(sum(inYear) / monthsSoFar)}</div><div class="d">za ${plural(monthsSoFar, 'měsíc', 'měsíce', 'měsíců')}</div></div>`}
+        <div class="kpi"><div class="k">Příjmy ${isCurrent ? 'letos' : `v roce ${year}`}</div><div class="v">${Fmt.money0(received)}</div><div class="d">${incomesInYear.length
+          ? `z toho ${Fmt.money0(sumAmount(incomesInYear))} bez faktury`
+          : plural(paidInYear.length, 'zaplacená faktura', 'zaplacené faktury', 'zaplacených faktur')}</div></div>
         <a class="kpi" href="#/faktury?rok=vse&stav=ceka"><div class="k">Čeká na platbu</div><div class="v">${Fmt.money0(sum(unpaid))}</div><div class="d">${plural(unpaid.length, 'faktura', 'faktury', 'faktur')}</div></a>
         <a class="kpi" href="#/faktury?rok=vse&stav=po-splatnosti"><div class="k">Po splatnosti</div><div class="v${overdue.length ? ' bad' : ''}">${Fmt.money0(sum(overdue))}</div><div class="d">${plural(overdue.length, 'faktura', 'faktury', 'faktur')}</div></a>
       </div>
@@ -353,7 +357,6 @@ async function viewDashboard(params) {
           <p class="limit-note ${vatLevel}">${flag(vatLevel)} ${turnover > VAT_LIMIT
             ? `Limit je překročený o ${Fmt.money0(turnover - VAT_LIMIT)}`
             : `Do limitu zbývá ${vatLevel ? 'už jen ' : ''}${Fmt.money0(VAT_LIMIT - turnover)}`}</p>
-          <p class="hint">Když obrat za kalendářní rok přesáhne 2&nbsp;000&nbsp;000&nbsp;Kč, budeš od 1.&nbsp;1. dalšího roku plátce DPH, nad 2&nbsp;536&nbsp;500&nbsp;Kč hned ode dne po překročení.${incomesInYear.length ? ' Obrat zahrnuje i příjmy bez faktury.' : ''}</p>
         </section>
         ${incomesInYear.length ? `
           <section class="table-card wide">
@@ -372,11 +375,11 @@ async function viewDashboard(params) {
           </section>` : ''}
         <section class="table-card wide">
           <table class="list">
-            <thead><tr><th>Rok</th><th class="num">Faktur</th><th class="num">Vyfakturováno</th><th class="num">Zaplaceno</th>${incomes.length ? '<th class="num">Bez faktury</th>' : ''}</tr></thead>
+            <thead><tr><th>Rok</th><th class="num">Faktur</th><th class="num">Vyfakturováno</th><th class="num">Příjmy</th></tr></thead>
             <tbody>${yearRows.map(r => `
               <tr data-href="#/prehled?rok=${r.y}" class="${r.y === year ? 'selected' : ''}">
                 <td class="strong"><a href="#/prehled?rok=${r.y}" style="color:inherit">${r.y}</a></td>
-                <td class="num">${r.count}</td><td class="num">${Fmt.money0(r.total)}</td><td class="num">${Fmt.money0(r.paid)}</td>${incomes.length ? `<td class="num">${Fmt.money0(r.other)}</td>` : ''}
+                <td class="num">${r.count}</td><td class="num">${Fmt.money0(r.total)}</td><td class="num">${Fmt.money0(r.received)}</td>
               </tr>`).join('')}
             </tbody>
           </table>
@@ -518,8 +521,7 @@ function duesCard({ year, isCurrent, active, unpaid, incomes, settings }) {
   const pending = isCurrent ? sum(unpaid) : 0;
   const total = d => d.tax + (side ? d.health + d.social : 0);
   const now = yearlyDues(received, rate, limit);
-  const later = yearlyDues(received + pending, rate, limit);
-  const crosses = later.over && !now.over;
+  const crosses = yearlyDues(received + pending, rate, limit).over && !now.over; // čekající platby by přetáhly limit
   const freeIncome = taxFreeIncome(rate);
   // Daň nemá skok jako pojištění, takže se blížící hranice ukazuje nejvýš oranžově.
   const taxLevel = !now.tax && limitLevel(received, freeIncome, pending) ? 'warn' : '';
@@ -528,7 +530,6 @@ function duesCard({ year, isCurrent, active, unpaid, incomes, settings }) {
   const rows = [['Daň z příjmů', Fmt.money0(now.tax), now.tax
     ? `${pctLabel(TAX_RATE)} ze základu ${Fmt.money0(now.base)} minus sleva na poplatníka ${Fmt.money0(TAX_CREDIT)}`
     : `${flag(taxLevel)} sleva na poplatníka ji pokryje do ${rate ? 'příjmů' : 'zisku'} ${Fmt.money0(freeIncome)}`, '', taxLevel]];
-  let socialHint = '';
   if (side) {
     rows.push(['Zdravotní pojištění', Fmt.money0(now.health), `${pctLabel(HEALTH_RATE)} z poloviny zisku`]);
     if (!limit) {
@@ -543,9 +544,6 @@ function duesCard({ year, isCurrent, active, unpaid, incomes, settings }) {
           : isCurrent ? `${flag(level)} letos ještě můžeš přijmout ${level ? 'jen ' : ''}${Fmt.money0(left)} a platit ho nebudeš`
             : `${flag(level)} pod limitem o ${Fmt.money0(left)}`,
         meter(received, maxIncome, { pending, label: 'Přijato', legend }), level]);
-      socialHint = now.over
-        ? 'Po překročení limitu se od podání přehledu ČSSZ platí i měsíční zálohy na sociální pojištění.'
-        : `Sociální pojištění se platí, až když zisk za rok dosáhne ${Fmt.money0(limit)} (rozhodná částka ${year})${rate ? `, při paušálu ${rate} % to je víc než ${Fmt.money0(maxIncome)} přijatých plateb` : ''}.`;
     }
   }
 
@@ -560,12 +558,7 @@ function duesCard({ year, isCurrent, active, unpaid, incomes, settings }) {
       <dl class="dues-list">${rows.map(([label, value, note, extra, level]) => `
         <div class="${level || ''}"><dt>${label}<span>${note}</span></dt><dd>${value}</dd>${extra ? `<dd class="extra">${extra}</dd>` : ''}</div>`).join('')}
       </dl>
-      ${total(later) > total(now) ? `<p class="hint${crosses ? ' bad' : ''}">${crosses ? `${flag('bad')} ` : ''}Když ti letos přijdou i čekající platby (${Fmt.money0(pending)}), bude to ${Fmt.money0(total(later))}${crosses ? ', protože překročíš limit pro sociální pojištění' : ''}.</p>` : ''}
-      <p class="hint">${socialHint}
-        Daň se platí v termínu daňového přiznání${side ? ', pojistné do 8 dnů po podání přehledu' : ''}.
-        ${side && Number(year) >= 2026 ? 'Zálohy na zdravotní se při studiu nebo zaměstnání od roku 2026 neplatí.' : ''}</p>
-      <p class="hint">Počítají se platby podle data zaplacení${incomes.length ? ` včetně příjmů bez faktury (${Fmt.money0(sumAmount(incomes))})` : ''} a jen příjmy z podnikání, jiné příjmy (třeba brigáda) daň změní.
-        ${rate ? `Paušál ${rate} % změníš` : 'Počítá se bez výdajů, takže skutečné částky budou nižší. Paušál nastavíš'} v&nbsp;<a href="#/nastaveni">Nastavení</a>.</p>
+      <p class="hint">${rate ? '' : 'Počítá se bez výdajů, takže skutečné částky budou nižší. Paušál nastavíš v&nbsp;<a href="#/nastaveni">Nastavení</a>. '}<a href="${TAX_HELP_URL}" target="_blank" rel="noopener">Jak se to počítá</a></p>
     </section>`;
 }
 

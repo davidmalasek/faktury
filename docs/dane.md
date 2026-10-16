@@ -2,10 +2,11 @@
 
 Přehled ukazuje, kolik za vybraný rok zaplatíš v dalším roce: daň z příjmů a u vedlejší činnosti i zdravotní a sociální pojištění (částka může vyjít i 0 Kč).
 Zisk se počítá jako přijaté platby (včetně příjmů bez faktury) minus výdajový paušál. Paušál se nastavuje v Nastavení.
+Přijaté platby za rok ukazuje nahoře v Přehledu číslo **Příjmy**: zaplacené faktury podle data zaplacení a příjmy bez faktury. **Vyfakturováno** vedle něj počítá jen faktury podle data vystavení, takže faktura z prosince zaplacená v lednu je ve vyfakturovaném za starý rok a v příjmech za nový.
 
-- **Daň:** 15 % ze zisku zaokrouhleného dolů na stovky minus sleva na poplatníka (30 840 Kč).
-- **Zdravotní pojištění:** 13,5 % z poloviny zisku. Při studiu nebo zaměstnání se od roku 2026 neplatí zálohy a celé pojistné se doplácí po podání přehledu.
-- **Sociální pojištění:** 29,2 % z 55 % zisku, ale jen když zisk za rok dosáhne rozhodné částky. Měřák v kartě hlídá, kolik ještě můžeš přijmout.
+- **Daň:** 15 % ze zisku zaokrouhleného dolů na stovky minus sleva na poplatníka (30 840 Kč). Platí se v termínu daňového přiznání.
+- **Zdravotní pojištění:** 13,5 % z poloviny zisku. Při studiu nebo zaměstnání se od roku 2026 neplatí zálohy a celé pojistné se doplácí do 8 dnů po podání přehledu.
+- **Sociální pojištění:** 29,2 % z 55 % zisku, ale jen když zisk za rok dosáhne rozhodné částky (2025: 111 736 Kč, 2026: 117 521 Kč, 2027: 123 992 Kč). Měřák v kartě hlídá, kolik ještě můžeš přijmout, a počítá i s paušálem (při 60 % je to v roce 2026 víc než 293 800 Kč přijatých plateb). Pojistné se doplácí do 8 dnů po podání přehledu a po překročení se od té doby platí i měsíční zálohy.
 - **DPH:** když obrat za kalendářní rok přesáhne 2 000 000 Kč, budeš plátce od 1. 1. dalšího roku. Nad 2 536 500 Kč hned ode dne po překročení.
 
 Počítá se jen s příjmy z podnikání. Jiné příjmy (třeba brigáda), skutečné výdaje a sazba daně 23 % pro velmi vysoké příjmy se nezohledňují.
