@@ -21,7 +21,7 @@ Upozornění jsou nahoře v Přehledu (za letošek), v měřácích a ve formul�
 ## Připomínka daňového přiznání
 
 Od 1. ledna je nahoře v Přehledu, do kdy podat přiznání za minulý rok. Lhůta platí každý rok stejně: elektronicky do 1. 5. (OSVČ má datovou schránku, takže podává elektronicky), a když připadne na víkend nebo svátek, posune se na nejbližší pracovní den. Ve stejné lhůtě se platí daň.
-Měsíc před termínem se připomínka zbarví oranžově, týden před ním červeně. Tlačítkem **Hotovo** ji odklikneš (v Nastavení → Podnikání jde vrátit). Ukáže se jen za rok, ve kterém máš nějakou fakturu nebo příjem, a neodkliknutá zmizí 60 dní po termínu.
+Měsíc před termínem se připomínka zbarví oranžově, týden před ním červeně. Tlačítkem **Hotovo** ji odklikneš (v Nastavení → Podnikání jde vrátit). Ukáže se jen za rok, ve kterém máš nějakou fakturu nebo příjem, a neodkliknutá zmizí 60 dní po termínu. Pak zmizí i zaškrtávátko v Nastavení a místo něj je tam jen, za jaký rok přijde další připomínka.
 
 ## Příjmy bez faktury
 

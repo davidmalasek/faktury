@@ -52,11 +52,13 @@ def _active(data, year):
 
 
 def tax_return(data, today=None):
-    """Připomínka přiznání za minulý rok. Ukazuje se od 1. 1., dokud ji uživatel neodklikne
-    (v nastavení tax_return_filed = rok), nejdéle 60 dní po termínu."""
+    """Připomínka přiznání za minulý rok. Je na řadě (season) od 1. 1. nejdéle 60 dní po termínu,
+    a jen když uživatel v tom roce podnikal. Ukazuje se, dokud ji neodklikne (v nastavení tax_return_filed = rok);
+    mimo tuhle dobu v Nastavení zaškrtávátko není."""
     today = today or date.today()
     year = today.year - 1
     paper, due = deadline(year)
     filed = db.get_settings(data)["tax_return_filed"] == year
-    show = not filed and today <= due + timedelta(days=SHOW_AFTER_DUE) and _active(data, year)
-    return {"year": year, "paper": paper.isoformat(), "due": due.isoformat(), "filed": filed, "show": show}
+    season = today <= due + timedelta(days=SHOW_AFTER_DUE) and _active(data, year)
+    return {"year": year, "paper": paper.isoformat(), "due": due.isoformat(), "filed": filed,
+            "season": season, "show": season and not filed}

@@ -1278,8 +1278,7 @@ async function viewContactForm(params, id) {
 // ---------- nastavení ----------
 
 async function viewSettings() {
-  const [s, cloud, peers] = await Promise.all([api('settings'), api('zaloha'), api('peers').catch(() => null)]);
-  const taxYear = new Date().getFullYear() - 1; // přiznání se podává za minulý rok
+  const [s, cloud, peers, taxReturn] = await Promise.all([api('settings'), api('zaloha'), api('peers').catch(() => null), api('priznani')]);
   return () => {
     setTitle('Nastavení');
     let dirty = false;
@@ -1313,9 +1312,10 @@ async function viewSettings() {
               <span class="hint">Přehled pak hlídá limit, do kterého se neplatí sociální pojištění. Když vedlejší činnost netrvá celý rok (dostuduješ, dovršíš 26 let), limit se poměrně krátí.</span>
             </div>
             <label class="c3">Výdajový paušál<select name="expense_rate">${EXPENSE_RATES.map(([v, t]) => `<option value="${v}" ${Number(s.expense_rate) === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-            <div class="c6">
-              <label class="check"><input type="checkbox" name="tax_return_filed" ${Number(s.tax_return_filed) === taxYear ? 'checked' : ''}> Daňové přiznání za rok ${taxYear} mám podané</label>
-              <span class="hint">Od ledna Přehled připomíná, do kdy přiznání za minulý rok podat. Když je podané, připomínka zmizí.</span>
+            <div class="c6">${taxReturn.season ? `
+              <label class="check"><input type="checkbox" name="tax_return_filed" ${taxReturn.filed ? 'checked' : ''}> Daňové přiznání za rok ${taxReturn.year} mám podané</label>
+              <span class="hint">Od ledna Přehled připomíná, do kdy přiznání za minulý rok podat. Když je podané, připomínka zmizí.</span>` : `
+              <span class="hint">Daňové přiznání za rok ${taxReturn.year + 1} ti Přehled připomene od ledna.</span>`}
             </div>
           </div>
         </section>
@@ -1370,7 +1370,8 @@ async function viewSettings() {
       const v = Object.fromEntries(new FormData(form));
       v.iban = czIban(v.account);
       v.side_activity = form.elements.side_activity.checked;
-      v.tax_return_filed = form.elements.tax_return_filed.checked ? taxYear : 0;
+      const filed = form.elements.tax_return_filed; // jen v době připomínky (viz dane.py)
+      if (filed) v.tax_return_filed = filed.checked ? taxReturn.year : 0;
       return v;
     };
     const hint = $('#iban-hint');

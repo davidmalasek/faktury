@@ -525,13 +525,15 @@ class TaxReturnTests(TempData):
             db.save_invoice(data, invoice("1", issue="2026-11-02", due="2026-11-16"))
         with db.open_data() as data:
             self.assertEqual(dane.tax_return(data, feb), {"year": 2026, "paper": "2027-04-01", "due": "2027-05-03",
-                                                          "filed": False, "show": True})
+                                                          "filed": False, "season": True, "show": True})
             self.assertTrue(dane.tax_return(data, date(2027, 7, 2))["show"])
-            self.assertFalse(dane.tax_return(data, date(2027, 7, 3))["show"])  # 60 dní po termínu už nestraší
+            late = dane.tax_return(data, date(2027, 7, 3))  # 60 dní po termínu už nestraší ani v Nastavení
+            self.assertEqual((late["season"], late["show"]), (False, False))
         with db.open_data(True) as data:
             db.save_settings(data, {"tax_return_filed": "2026"})
         with db.open_data() as data:
-            self.assertEqual((dane.tax_return(data, feb)["filed"], dane.tax_return(data, feb)["show"]), (True, False))
+            t = dane.tax_return(data, feb)
+            self.assertEqual((t["filed"], t["season"], t["show"]), (True, True, False))
             self.assertEqual(dane.tax_return(data, date(2028, 2, 1))["year"], 2027)
 
 
