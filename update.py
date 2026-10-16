@@ -111,7 +111,25 @@ def apply_zip(content, root=db.ROOT, version=None):
             tmp.write_bytes(z.read(info))
             os.chmod(tmp, (info.external_attr >> 16) & 0o777 or 0o644)
             os.replace(tmp, target)
+        _remove_obsolete(root, set(files))
     return _fingerprint(root) != before
+
+
+def _remove_obsolete(root, keep):
+    """Smaže soubory, které v nové verzi už nejsou (přejmenované nebo smazané), a prázdné složky po nich.
+    Složky z KEEP (data, Python) nechá být."""
+    folders = []
+    for folder, dirs, names in os.walk(root):
+        here = Path(folder).relative_to(root)
+        if here == Path("."):
+            dirs[:] = [d for d in dirs if d not in KEEP]
+        for name in names:
+            if here / name not in keep:
+                (Path(folder) / name).unlink()
+        folders.append(Path(folder))
+    for folder in reversed(folders[1:]):  # od nejhlubší, kořen zůstane
+        if not any(folder.iterdir()):
+            folder.rmdir()
 
 
 def install(root=db.ROOT):

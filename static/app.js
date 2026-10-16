@@ -146,8 +146,8 @@ const statusLabel = inv => {
 };
 const contactLabel = c => (c.ico ? `${c.name} (IČO ${c.ico})` : c.name);
 const offeredLabel = c => `${contactLabel(c)} — ${c.app_name}`; // kontakt z jiné aplikace (Hodinovka…)
-// Skutečná ikona aplikace systému. Ikony všech aplikací jsou v static/mejvos (v každé aplikaci stejné).
-const appIcon = (id, size = 16) => `<img class="app-icon" src="mejvos/${esc(encodeURIComponent(id))}.svg" alt="" width="${size}" height="${size}">`;
+// Skutečná ikona propojené aplikace. Ikony všech aplikací jsou v static/aplikace (v každé aplikaci stejné).
+const appIcon = (id, size = 16) => `<img class="app-icon" src="aplikace/${esc(encodeURIComponent(id))}.svg" alt="" width="${size}" height="${size}">`;
 const pickCustomer = c => Object.fromEntries(CUSTOMER_FIELDS.map(k => [k, c[k] || '']));
 const sameData = (a, b, keys) => keys.every(k => String(a?.[k] ?? '') === String(b?.[k] ?? ''));
 const addressLines = p => [p.street, [p.zip, p.city].filter(Boolean).join(' '), p.country].filter(Boolean);
@@ -1432,7 +1432,7 @@ async function viewSettings() {
   };
 }
 
-/** Ostatní aplikace systému (MejvOS): propojené, nainstalované, nebo ke stažení jedním kliknutím. */
+/** Ostatní aplikace: propojené, nainstalované, nebo ke stažení jedním kliknutím. */
 function peersCard(peers) {
   return `
     <section class="card">

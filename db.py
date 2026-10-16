@@ -13,7 +13,7 @@ from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
-import mejvos
+import propojeni
 
 APP_ID = "faktury"
 ROOT = Path(__file__).resolve().parent
@@ -67,7 +67,7 @@ def init():
     ARCHIV.mkdir(exist_ok=True)
     if not DATA_FILE.exists():
         _save({"settings": dict(DEFAULT_SETTINGS), "contacts": [], "invoices": [], "incomes": []})
-    with _lock:  # kontakty ze starších verzí dostanou uid, ať je poznají i ostatní aplikace (MejvOS)
+    with _lock:  # kontakty ze starších verzí dostanou uid, ať je poznají i ostatní aplikace
         data = _load()
         if _ensure_uids(data):
             _save(data)
@@ -131,7 +131,7 @@ def backup_now(label):
     return target
 
 
-# ---------- propojení s ostatními aplikacemi (MejvOS) ----------
+# ---------- propojení s ostatními aplikacemi ----------
 
 _peer_sig = None
 
@@ -141,7 +141,7 @@ def _ensure_uids(data):
     changed = False
     for c in data["contacts"]:
         if not c.get("uid"):
-            c["uid"] = mejvos.new_uid()
+            c["uid"] = propojeni.new_uid()
             changed = True
         if not c.get("updated_at"):
             c["updated_at"] = c.get("created_at") or _now()
@@ -157,8 +157,8 @@ def settings_ready(data):
 def publish(data):
     """Zveřejní ostatním aplikacím kontakty a stav faktur, které z nich přišly.
     U smazaných faktur zveřejní, že je někdo smazal (deleted), ať je aplikace, odkud přišly, taky zruší."""
-    mejvos.publish_contacts(APP_ID, data["contacts"])
-    mejvos.publish(APP_ID, "invoices", [
+    propojeni.publish_contacts(APP_ID, data["contacts"])
+    propojeni.publish(APP_ID, "invoices", [
         {"app": inv["source"]["app"], "ref": inv["source"]["ref"], "id": inv["id"], "number": inv["number"],
          "status": inv["status"], "issue_date": inv["issue_date"], "due_date": inv["due_date"],
          "paid_date": inv["paid_date"], "total": inv["total"]}
@@ -170,19 +170,19 @@ def sync_peers():
     """Převezme novější údaje propojených kontaktů z ostatních aplikací (stejné uid).
     Dívá se jen, když se od minule něco změnilo, takže je levné volat ho před každým požadavkem."""
     global _peer_sig
-    sig = mejvos.signature("contacts", APP_ID)
+    sig = propojeni.signature("contacts", APP_ID)
     if sig == _peer_sig:
         return
     with _lock:
         data = _load()
-        if mejvos.merge_contacts(data["contacts"], mejvos.peer_contacts(APP_ID)):
+        if propojeni.merge_contacts(data["contacts"], propojeni.peer_contacts(APP_ID)):
             _commit(data)
     _peer_sig = sig
 
 
 def offered_contacts(data):
     """Kontakty z ostatních aplikací, které ve Fakturách ještě nejsou – nabízí se u faktury i v kontaktech."""
-    return mejvos.offered_contacts(data["contacts"], mejvos.peer_contacts(APP_ID))
+    return propojeni.offered_contacts(data["contacts"], propojeni.peer_contacts(APP_ID))
 
 
 def revision():
@@ -193,7 +193,7 @@ def revision():
         own = (st.st_mtime_ns, st.st_size, st.st_ino)  # ukládá se vždy do nového souboru (viz _save)
     except OSError:
         own = None
-    sig = (own, mejvos.signature("contacts", APP_ID), mejvos.signature("invoices", APP_ID))
+    sig = (own, propojeni.signature("contacts", APP_ID), propojeni.signature("invoices", APP_ID))
     return hashlib.sha1(repr(sig).encode()).hexdigest()[:16]
 
 
@@ -367,7 +367,7 @@ def save_contact(data, values, cid=None):
     if cid is None:
         uid = _text(values.get("uid"))
         if not uid or any(c.get("uid") == uid for c in data["contacts"]):
-            uid = mejvos.new_uid()
+            uid = propojeni.new_uid()
         contact = {"id": _next_id(data["contacts"]), "uid": uid, **clean, "created_at": _now(), "updated_at": _now()}
         data["contacts"].append(contact)
         return contact
@@ -619,7 +619,7 @@ def delete_invoice(data, iid):
     if source.get("ref"):
         data["deleted_links"] = [d for d in data["deleted_links"] if (d["app"], d["ref"]) != (source["app"], source["ref"])]
         data["deleted_links"].append({"app": source["app"], "ref": source["ref"], "number": inv["number"],
-                                      "deleted_at": mejvos.now()})
+                                      "deleted_at": propojeni.now()})
         del data["deleted_links"][:-SMAZANE_ODKAZY]
 
 

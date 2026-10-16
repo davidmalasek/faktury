@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import dane  # noqa: E402
 import db  # noqa: E402
 import import_data  # noqa: E402
-import mejvos  # noqa: E402
+import propojeni  # noqa: E402
 import server  # noqa: E402
 import update  # noqa: E402
 
@@ -38,10 +38,11 @@ class TempData(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         self._orig = {k: getattr(db, k) for k in ("DATA", "DATA_FILE", "ARCHIV", "ZALOHY", "SMAZANE", "ICLOUD")}
-        self._mejvos = (mejvos.HOME, mejvos.ENABLED)
+        self._propojeni = (propojeni.HOME, propojeni.OLD_HOME, propojeni.ENABLED)
         db.ICLOUD = None  # testy se nikdy nesmí dotknout skutečného iCloudu
-        mejvos.HOME = root / "MejvOS"  # ani skutečného systému MejvOS
-        mejvos.ENABLED = False
+        propojeni.HOME = root / "propojeni"  # ani skutečné sdílené složky
+        propojeni.OLD_HOME = root / "stara-sdilena"
+        propojeni.ENABLED = False
         db._peer_sig = None
         db.DATA = root
         db.DATA_FILE = root / "faktury.json"
@@ -53,7 +54,7 @@ class TempData(unittest.TestCase):
     def tearDown(self):
         for k, v in self._orig.items():
             setattr(db, k, v)
-        mejvos.HOME, mejvos.ENABLED = self._mejvos
+        propojeni.HOME, propojeni.OLD_HOME, propojeni.ENABLED = self._propojeni
         self.tmp.cleanup()
 
     def stored(self):
@@ -275,7 +276,7 @@ class DataTests(TempData):
 
 
 class EcosystemTests(TempData):
-    """Propojení s ostatními aplikacemi systému MejvOS (třeba s Hodinovkou)."""
+    """Propojení s ostatními aplikacemi (třeba s Hodinovkou)."""
 
     def linked(self, ref="r1", **customer):
         return {"customer": {"name": "Kavárna", **customer},
@@ -287,15 +288,34 @@ class EcosystemTests(TempData):
         launcher = Path(self.tmp.name) / "hodinovka/spustit.sh"
         launcher.parent.mkdir(exist_ok=True)
         launcher.write_text("exit 0")
-        mejvos._write_json(mejvos.HOME / "apps/hodinovka.json", {
+        propojeni._write_json(propojeni.HOME / "apps/hodinovka.json", {
             "id": "hodinovka", "name": "Hodinovka", "api": "http://127.0.0.1:1/api/os", "provides": ["contacts"],
             "launch": {"command": ["/bin/bash", str(launcher)]}})
-        mejvos._write_json(mejvos.HOME / "contacts/hodinovka.json", {"items": items})
+        propojeni._write_json(propojeni.HOME / "contacts/hodinovka.json", {"items": items})
+
+    def test_old_shared_folder_moves_and_link_goes_away(self):
+        old, launcher = propojeni.OLD_HOME, Path(self.tmp.name) / "hodinovka-spustit.sh"
+        launcher.write_text("", encoding="utf-8")
+        peer = {"id": "hodinovka", "api": "http://127.0.0.1:1/api/os", "launch": {"command": [str(launcher)]}}
+        propojeni._write_json(old / "apps/hodinovka.json", {**peer, "protocol": 1})
+        propojeni._write_json(old / "contacts/hodinovka.json", {"items": [{"uid": "a", "name": "A"}]})
+        propojeni.ENABLED = True
+        announce = lambda: propojeni.announce("faktury", name="faktury", version="9.9.9", port=1, root=db.ROOT, provides=[])  # noqa: E731
+        announce()
+        self.assertTrue((propojeni.HOME / "contacts/hodinovka.json").exists())
+        self.assertTrue(old.is_symlink())  # starší verze druhé aplikace ji najde přes odkaz
+        self.assertTrue((old / "apps/faktury.json").exists())
+        announce()
+        self.assertTrue(old.is_symlink())
+        propojeni._write_json(propojeni.HOME / "apps/hodinovka.json", {**peer, "protocol": 2})  # aktualizovala se
+        announce()
+        self.assertFalse(old.is_symlink() or old.exists())
+        self.assertTrue((propojeni.HOME / "contacts/hodinovka.json").exists())
 
     def test_app_icons(self):
         # Nastavení ukazuje skutečné ikony aplikací: složka je v každé aplikaci stejná a zná celý katalog
-        icons = db.ROOT / "static/mejvos"
-        self.assertEqual(sorted(p.stem for p in icons.glob("*.svg")), sorted(mejvos.CATALOG))
+        icons = db.ROOT / "static/aplikace"
+        self.assertEqual(sorted(p.stem for p in icons.glob("*.svg")), sorted(propojeni.CATALOG))
         self.assertEqual((icons / f"{db.APP_ID}.svg").read_bytes(), (db.ROOT / "static/icon.svg").read_bytes())
 
     def test_old_contacts_get_stable_uid(self):
@@ -344,23 +364,23 @@ class EcosystemTests(TempData):
             self.assertEqual(len(data["contacts"]), 2)
 
     def test_publishes_contacts_and_linked_invoices(self):
-        mejvos.ENABLED = True
+        propojeni.ENABLED = True
         with db.open_data(True) as data:
             db.save_invoice(data, invoice("1", save_contact=True))
             inv = db.create_linked_invoice(data, self.linked())
-        contacts = json.loads((mejvos.HOME / "contacts/faktury.json").read_text(encoding="utf-8"))["items"]
+        contacts = json.loads((propojeni.HOME / "contacts/faktury.json").read_text(encoding="utf-8"))["items"]
         self.assertEqual(sorted(c["name"] for c in contacts), ["Kavárna", "Odběratel s.r.o."])
-        published = json.loads((mejvos.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))
+        published = json.loads((propojeni.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))
         self.assertEqual(published["ready"], False)  # chybí údaje dodavatele
         self.assertEqual([(i["ref"], i["status"]) for i in published["items"]], [("r1", "issued")])  # jen propojené
         with db.open_data(True) as data:
             db.set_status(data, inv["id"], "paid")
-        published = json.loads((mejvos.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))
+        published = json.loads((propojeni.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))
         self.assertEqual(published["items"][0]["status"], "paid")
 
     def test_deleted_linked_invoices_are_published(self):
-        mejvos.ENABLED = True
-        read = lambda: json.loads((mejvos.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))  # noqa: E731
+        propojeni.ENABLED = True
+        read = lambda: json.loads((propojeni.HOME / "invoices/faktury.json").read_text(encoding="utf-8"))  # noqa: E731
         with db.open_data(True) as data:
             inv = db.create_linked_invoice(data, self.linked())
             own = db.save_invoice(data, invoice("1"))
@@ -403,7 +423,7 @@ class EcosystemTests(TempData):
         self.assertEqual([i["number"] for i in self.stored()["invoices"]], ["2"])
 
     def test_peer_contacts_are_offered_and_linked(self):
-        later = mejvos.now()
+        later = propojeni.now()
         self.peer([{"uid": "h1", "name": "Studio Sova", "updated_at": later},
                    {"uid": "h2", "name": "Odběratel s.r.o.", "updated_at": later}])
         with db.open_data(True) as data:
@@ -428,7 +448,7 @@ def release_zip(version, files, prefix=None):
     """Archiv verze ve tvaru, v jakém ho dává GitHub (vše ve složce faktury-<verze>/)."""
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        for name, (content, mode) in {"VERSION": (version, 0o644), "server.py": ("# nový", 0o644), **files}.items():
+        for name, (content, mode) in {"VERSION": (version, 0o644), "server.py": ("# nový", 0o644), "macos/Faktury.swift": ("okno", 0o644), **files}.items():
             info = zipfile.ZipInfo(f"{prefix or 'faktury-' + version}/{name}")
             info.external_attr = (0o100000 | mode) << 16
             z.writestr(info, content)
@@ -469,6 +489,19 @@ class UpdateTests(TempData):
         self.assertEqual((self.root / "data/faktury.json").read_text(encoding="utf-8"), "moje data")
         self.assertTrue((self.root / "spustit.sh").stat().st_mode & 0o100)
         self.assertFalse((self.root / "python").exists())
+
+    def test_apply_removes_files_missing_in_new_version(self):
+        (self.root / "stary.py").write_text("# přejmenovaný", encoding="utf-8")
+        (self.root / "static/stare").mkdir(parents=True)
+        (self.root / "static/stare/ikona.svg").write_text("<svg/>", encoding="utf-8")
+        (self.root / "python/bin").mkdir(parents=True)
+        (self.root / "python/bin/python3").write_text("python", encoding="utf-8")
+        update.apply_zip(release_zip("1.1.0", {"static/app.js": ("// nový", 0o644)}), self.root, "1.1.0")
+        self.assertFalse((self.root / "stary.py").exists())
+        self.assertFalse((self.root / "static/stare").exists())
+        self.assertTrue((self.root / "static/app.js").exists())
+        self.assertTrue((self.root / "python/bin/python3").exists())
+        self.assertTrue((self.root / "data/faktury.json").exists())
 
     def test_apply_reports_changed_app_window(self):
         content = release_zip("1.1.0", {"macos/Faktury.swift": ("nové okno", 0o644)})

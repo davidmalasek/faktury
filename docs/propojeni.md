@@ -1,24 +1,24 @@
-# MejvOS – jak spolu aplikace mluví
+# Propojení aplikací – jak spolu aplikace mluví
 
-MejvOS je skupina malých aplikací pro Mac, které o sobě vědí a spolupracují: **Faktury**, **Hodinovka** a další, které přibudou.
+**Faktury**, **Hodinovka** a další aplikace, které přibudou, o sobě na jednom Macu vědí a spolupracují.
 Každá aplikace funguje i sama. Když jsou na Macu dvě, najdou se a propojí se bez nastavování.
-Název MejvOS je jen vnitřní (sdílená složka a kód). Uživatel ho nikde nevidí: pro něj jsou to prostě aplikace, které spolu spolupracují.
+Propojení nemá žádný vlastní název: pro uživatele jsou to prostě aplikace, které spolu spolupracují.
 
-Tenhle soubor je stejný ve všech repozitářích systému. Kdo píše novou aplikaci, řídí se jím.
+Tenhle soubor je stejný ve všech propojených aplikacích. Kdo píše novou aplikaci, řídí se jím.
 
 ## Co se nemusí instalovat
 
 Nic. Sdílená složka a společný kód jsou součástí každé aplikace:
 
-- Každá aplikace nese stejný soubor `mejvos.py`. Je jedno, kterou si člověk stáhne dřív.
-- Složku `~/Library/Application Support/MejvOS` vytvoří ta aplikace, která se spustí první.
+- Každá aplikace nese stejný soubor `propojeni.py`. Je jedno, kterou si člověk stáhne dřív.
+- Složku `~/Library/Application Support/Propojené aplikace` vytvoří ta aplikace, která se spustí první.
 - Když druhá aplikace na Macu chybí, první ji nabídne nainstalovat jedním kliknutím (Nastavení → Propojené aplikace, nebo rovnou tam, kde je potřeba, třeba „Nainstalovat Faktury“ u vyfakturování). Stáhne poslední vydání z GitHubu, dá ho do složky Aplikace a spustí.
-- Každá aplikace se sama aktualizuje z GitHubu, a s ní i její kopie `mejvos.py`.
+- Každá aplikace se sama aktualizuje z GitHubu, a s ní i její kopie `propojeni.py`.
 
 ## Sdílená složka
 
 ```
-~/Library/Application Support/MejvOS/
+~/Library/Application Support/Propojené aplikace/
   apps/<id>.json        manifest: kdo jsem, kde běžím, co umím a jak mě spustit
   contacts/<id>.json    moje kontakty (klienti) ve společném tvaru
   invoices/<id>.json    stav faktur, které vznikly z jiné aplikace (zveřejňují Faktury)
@@ -26,8 +26,8 @@ Nic. Sdílená složka a společný kód jsou součástí každé aplikace:
 
 Do složky zapisuje každá aplikace jen svoje soubory. Ostatní je jen čtou, takže druhá aplikace kvůli tomu nemusí běžet.
 Soubory se zapisují atomicky (dočasný soubor a přejmenování), a jen když se jejich obsah změnil.
-Ostatní aplikace tak poznají změnu podle otisku souborů (`mejvos.signature`) a jejich otevřená okna se samo obnoví (živé obnovení v `docs/styl.md`).
-Při testech a s testovacími daty se do skutečné složky nezapisuje. Jinou složku nastaví proměnná `MEJVOS_DIR`.
+Ostatní aplikace tak poznají změnu podle otisku souborů (`propojeni.signature`) a jejich otevřená okna se samo obnoví (živé obnovení v `docs/styl.md`).
+Při testech a s testovacími daty se do skutečné složky nezapisuje. Jinou složku nastaví proměnná `PROPOJENI_DIR`.
 
 ### Manifest (`apps/<id>.json`)
 
@@ -38,7 +38,7 @@ Zapisuje ho server aplikace při každém spuštění:
   "id": "faktury",
   "name": "Faktury",
   "version": "1.2.0",
-  "protocol": 1,
+  "protocol": 2,
   "url": "http://localhost:8765",
   "api": "http://localhost:8765/api/os",
   "scheme": "faktury",
@@ -119,8 +119,8 @@ Každá aplikace má na svém lokálním serveru:
 - Stornovanou nechá v evidenci i v číselné řadě a odpoví `{"deleted": false, "status": "cancelled"}`.
 - Když faktura neexistuje (už je smazaná), odpoví `{"deleted": false, "status": null}`. Opakovaný požadavek tedy nic nerozbije.
 
-Volající aplikace (`mejvos.call`) při nedostupném serveru spustí druhou aplikaci přes `launch` a zkusí to znovu.
-Když je aplikace nainstalovaná, ale ještě nikdy neběžela (manifest chybí), otevře ji (`open -g`) a počká, až se přihlásí.
+Volající aplikace (`propojeni.call`) při nedostupném serveru spustí druhou aplikaci přes `launch` a zkusí to znovu.
+Když je aplikace nainstalovaná, ale ještě nikdy neběžela (manifest chybí), otevře ji (`open -g`) a počká, až se zapíše do sdílené složky.
 
 ## Bezpečnost
 
@@ -130,13 +130,14 @@ Když je aplikace nainstalovaná, ale ještě nikdy neběžela (manifest chybí)
 
 ## Nová aplikace
 
-1. Zkopíruj `mejvos.py` (stejný soubor jako ve Fakturách a v Hodinovce) a přidej aplikaci do `CATALOG`, a to ve všech aplikacích.
-   Stejně tak složku `static/mejvos/` s ikonami: přidej do ní ikonu nové aplikace (kopii jejího `static/icon.svg`) a zkopíruj ji do všech aplikací.
-2. Server při spuštění zavolá `mejvos.announce(...)`, po každém uložení `mejvos.publish_contacts(...)` a před každým požadavkem levné srovnání kontaktů (`merge_contacts` při změně `signature`).
-3. Zveřejněné seznamy čti přes `mejvos.read(kind)`, volání přes `mejvos.call(app, …)`.
+1. Zkopíruj `propojeni.py` (stejný soubor jako ve Fakturách a v Hodinovce) a přidej aplikaci do `CATALOG`, a to ve všech aplikacích.
+   Stejně tak složku `static/aplikace/` s ikonami: přidej do ní ikonu nové aplikace (kopii jejího `static/icon.svg`) a zkopíruj ji do všech aplikací.
+2. Server při spuštění zavolá `propojeni.announce(...)`, po každém uložení `propojeni.publish_contacts(...)` a před každým požadavkem levné srovnání kontaktů (`merge_contacts` při změně `signature`).
+3. Zveřejněné seznamy čti přes `propojeni.read(kind)`, volání přes `propojeni.call(app, …)`.
 4. Vyber volný port (Faktury 8765, Hodinovka 8766) a URL schéma podle `id`.
 5. Vzhled podle `docs/styl.md`.
 
 Když se protokol změní nekompatibilně, zvyš `PROTOCOL`. Starší aplikace pak nové funkce jen nenabídnou, nic nespadne.
 
-Název systému je v `mejvos.py` (`NAME`). Podle něj se jmenuje i sdílená složka, takže se už nemění: aplikace s jiným názvem by se navzájem nenašly.
+Sdílená složka se už nepřejmenovává: aplikace s jinou složkou by se navzájem nenašly.
+Do protokolu 1 byla jinde (`OLD_HOME` v `propojeni.py`). Aplikace s protokolem 2 ji při spuštění přesunou sem a na staré místo dají odkaz, přes který ji najdou starší verze ostatních aplikací. Odkaz smažou, až mají všechny nainstalované aplikace protokol 2.

@@ -17,10 +17,10 @@ python3 import_data.py soubor.json --zkouska   # import starých faktur i s PDF 
 
 Bez závislostí: backend na standardní knihovně Pythonu a frontend v čistém JavaScriptu.
 PDF vytváří knihovna pdfmake, přibalená ve `static/vendor`.
-Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`, a do sdílené složky propojených aplikací se přihlásí, jen když nastavíš `MEJVOS_DIR`.
+Testovací data: `FAKTURY_DATA=/jina/slozka FAKTURY_PORT=8799 python3 server.py`. Do iCloudu se zálohují, jen když nastavíš `FAKTURY_ICLOUD`, a do sdílené složky propojených aplikací se zapíšou, jen když nastavíš `PROPOJENI_DIR`.
 
 Vzhled, technika i texty jsou společné pro všechny propojené aplikace a popisuje je [styl.md](styl.md).
-Propojení s Hodinovkou a dalšími aplikacemi (vnitřně MejvOS) popisuje [mejvos.md](mejvos.md) a obstarává ho `mejvos.py`. Ten soubor je stejný ve všech aplikacích, takže když ho měníš, změň ho i v Hodinovce.
+Propojení s Hodinovkou a dalšími aplikacemi popisuje [propojeni.md](propojeni.md) a obstarává ho `propojeni.py`. Ten soubor je stejný ve všech aplikacích, takže když ho měníš, změň ho i v Hodinovce.
 
 ## Okno aplikace
 
@@ -43,7 +43,7 @@ Data jsou ve složce `~/Library/Application Support/Faktury/data` (ve vývojové
 | `data/zalohy/` | automatická záloha před první změnou každého dne (30 dní) a před každým importem a aktualizací |
 | `data/smazane/` | PDF smazaných faktur a dokladů (nic se nemaže natrvalo) |
 | iCloud Drive → `Faktury záloha` | kopie všeho výše, aktualizuje se po každé změně |
-| `~/Library/Application Support/MejvOS` | co si Faktury a Hodinovka navzájem ukazují (kontakty, stav faktur z Hodinovky) |
+| `~/Library/Application Support/Propojené aplikace` | co si Faktury a Hodinovka navzájem ukazují (kontakty, stav faktur z Hodinovky) |
 
 Složka `data` se do gitu záměrně neukládá, protože obsahuje osobní údaje klientů.
 Z iCloudu se nic nemaže, kromě denních záloh starších než 30 dní.
@@ -54,7 +54,7 @@ Z iCloudu se nic nemaže, kromě denních záloh starších než 30 dní.
 
 ## Aktualizace a vydání
 
-Faktury se při každém otevření podívají na GitHub, jestli nevyšla nová verze, a samy ji nainstalují. Před aktualizací se data zazálohují a data aktualizace nikdy nepřepíše.
+Faktury se při každém otevření podívají na GitHub, jestli nevyšla nová verze, a samy ji nainstalují. Před aktualizací se data zazálohují a data aktualizace nikdy nepřepíše. Soubory, které v nové verzi už nejsou, aktualizace smaže.
 Aktualizace mění jen soubory ve složce Faktur, ne samotnou aplikaci, takže se macOS na nic znovu neptá.
 Výjimečně se změní i okno aplikace. Pak se stáhne nová Faktury.app a appku je potřeba zavřít a otevřít. macOS se potom může jednou znovu zeptat na iCloud Drive.
 

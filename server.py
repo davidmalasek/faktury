@@ -16,7 +16,7 @@ from urllib.parse import unquote, urlparse
 
 import dane
 import db
-import mejvos
+import propojeni
 import update
 
 PORT = int(os.environ.get("FAKTURY_PORT", "8765"))
@@ -25,7 +25,7 @@ ALLOWED_HOSTS = {f"localhost:{PORT}", f"127.0.0.1:{PORT}"}
 MAX_UPLOAD = 25 * 1024 * 1024
 DOC_TYPES = ("application/pdf", "image/png", "image/jpeg")  # doklady k příjmům bez faktury
 NAME = "Faktury"
-PROVIDES = ("contacts", "invoices")  # co umí pro ostatní aplikace systému MejvOS (docs/mejvos.md)
+PROVIDES = ("contacts", "invoices")  # co umí pro ostatní propojené aplikace (docs/propojeni.md)
 
 
 def ares_lookup(ico):
@@ -183,14 +183,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(update.install())
                 return update.restart_later()  # nový kód se načte restartem serveru
         if res == "peers" and rid is None and method == "GET":
-            return self.send_json(mejvos.overview(db.APP_ID))
+            return self.send_json(propojeni.overview(db.APP_ID))
         if res == "peers" and isinstance(rid, str) and sub == "install" and method == "POST":
             self.read_body()
-            mejvos.install(rid)
-            return self.send_json(mejvos.overview(db.APP_ID))
+            propojeni.install(rid)
+            return self.send_json(propojeni.overview(db.APP_ID))
         if res == "peers" and isinstance(rid, str) and sub == "open" and method == "POST":
             self.read_body()
-            mejvos.open_app(rid)
+            propojeni.open_app(rid)
             return self.send_json({"ok": True})
 
         db.sync_peers()
@@ -287,12 +287,12 @@ class Handler(BaseHTTPRequestHandler):
         elif res == "offered" and method == "GET":
             return db.offered_contacts(data)
 
-        elif res == "os":  # API pro ostatní aplikace systému MejvOS (docs/mejvos.md)
+        elif res == "os":  # API pro ostatní propojené aplikace (docs/propojeni.md)
             if rid is None and method == "GET":
                 return {"id": db.APP_ID, "name": NAME, "version": update.current_version(),
-                        "protocol": mejvos.PROTOCOL, "provides": list(PROVIDES), "ready": db.settings_ready(data)}
+                        "protocol": propojeni.PROTOCOL, "provides": list(PROVIDES), "ready": db.settings_ready(data)}
             if rid == "contacts" and method == "GET":
-                return [mejvos.contact(c) for c in data["contacts"]]
+                return [propojeni.contact(c) for c in data["contacts"]]
             if rid == "invoices" and sub is None and method == "POST":
                 return db.create_linked_invoice(data, body)
             if rid == "invoices" and sub == "delete" and method == "POST":
@@ -321,8 +321,8 @@ def main():
     cloud = os.environ.get("FAKTURY_ICLOUD") or ("" if os.environ.get("FAKTURY_DATA") else str(db.ICLOUD_DEFAULT))
     if cloud:
         db.start_cloud_backup(cloud)
-    # Do sdíleného systému MejvOS se testovací data přihlásí, jen když mají vlastní MEJVOS_DIR.
-    mejvos.ENABLED = not os.environ.get("FAKTURY_DATA") or bool(os.environ.get("MEJVOS_DIR"))
+    # Do sdílené složky propojených aplikací se testovací data zapíšou, jen když mají vlastní PROPOJENI_DIR.
+    propojeni.ENABLED = not os.environ.get("FAKTURY_DATA") or bool(os.environ.get("PROPOJENI_DIR"))
     try:
         server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
@@ -330,7 +330,7 @@ def main():
                  f"Otevři http://localhost:{PORT}")
     url = f"http://localhost:{PORT}"
     (db.DATA / "server.pid").write_text(str(os.getpid()))  # spouštěč podle něj pozná starou verzi
-    mejvos.announce(db.APP_ID, name=NAME, version=update.current_version(), port=PORT, root=db.ROOT,
+    propojeni.announce(db.APP_ID, name=NAME, version=update.current_version(), port=PORT, root=db.ROOT,
                     provides=PROVIDES, env={"FAKTURY_APP": os.environ.get("FAKTURY_APP")})
     with db.open_data() as data:
         db.publish(data)

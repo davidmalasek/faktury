@@ -1,4 +1,4 @@
-# Styl aplikací MejvOS
+# Společný styl aplikací
 
 Společný vzhled i technika všech aplikací systému (Faktury, Hodinovka a další). Nová aplikace má vypadat a fungovat tak, aby se nedala poznat od ostatních.
 Tenhle soubor je stejný ve všech repozitářích.
@@ -9,7 +9,7 @@ Tenhle soubor je stejný ve všech repozitářích.
 - **Žádné přehlcení čísly.** Přehled = 4 karty s čísly nahoře, pod nimi nejvýš pár grafů a tabulek. Detaily až po kliknutí.
 - **Nic nesmí spadnout.** Neplatný vstup hlásí srozumitelnou větou (toast), při chybě se neuloží nic, data se zálohují. Co jde odvodit, appka předvyplní, ale uživatel to vždycky může přepsat.
 - **Česky a lidsky.** Tykání, krátké věty, žádný technický žargon („Server Faktur neběží – stiskni ⌘R“). Správné tvary čísel (1 záznam, 2 záznamy, 5 záznamů), pevná mezera v částkách (`12 500 Kč`), datum `14. 10. 2026`.
-- **Pro běžné lidi.** Texty v aplikaci i README jsou pro člověka, který má jen Mac a neprogramuje. Říkají, jak mu aplikace vyřeší jeho problém, ne výčet funkcí. Hned na začátku README je to hlavní: všechno je zdarma, na rozdíl od placených a napůl placených alternativ. Samozřejmosti se nevyjmenovávají (aplikace spolu prostě spolupracují, co se smaže v jedné, zmizí i v druhé). Vnitřní názvy jako MejvOS, server, JSON nebo Python uživatel nevidí, technické podrobnosti patří do `docs/`.
+- **Pro běžné lidi.** Texty v aplikaci i README jsou pro člověka, který má jen Mac a neprogramuje. Říkají, jak mu aplikace vyřeší jeho problém, ne výčet funkcí. Hned na začátku README je to hlavní: všechno je zdarma, na rozdíl od placených a napůl placených alternativ. Samozřejmosti se nevyjmenovávají (aplikace spolu prostě spolupracují, co se smaže v jedné, zmizí i v druhé). Technické názvy jako server, JSON nebo Python uživatel nevidí, podrobnosti patří do `docs/`. Propojení aplikací nemá žádný vlastní název, ani v kódu.
 - **Data jsou u uživatele.** Žádný účet ani cloud. Data v čitelném JSON, denní zálohy, kopie do iCloud Drive.
 
 ## Vzhled
@@ -35,7 +35,7 @@ Všechno je v `static/app.css`. Novou aplikaci začni kopií z Faktur a jen při
 **Pohyb:** krátké a tlumené (`cubic-bezier(0.2, 0.8, 0.2, 1)`, 0,15–0,3 s): stránka najede o 6 px, dialog se zvětší z 96 %, sloupce grafu vyrostou. Při `prefers-reduced-motion` se nehýbe nic.
 
 **Ikona aplikace:** zaoblený čtverec s jemným svislým přechodem a bílým symbolem uprostřed, mřížka macOS (čtverec 824 px v plátně 1024 px, stín pod ním). Každá aplikace má svou barvu: Faktury modrá (`#3a9bff → #0066dd`), Hodinovka oranžová (`#ffb340 → #ff7a00`).
-Ikona pro web je `static/icon.svg`. Ikony všech aplikací systému jsou v `static/mejvos/<id>.svg` a ukazují se tam, kde je řeč o jiné aplikaci (Nastavení → Propojené aplikace, štítek „propojeno“). Nikdy je nenahrazuj barevným čtverečkem s písmenem.
+Ikona pro web je `static/icon.svg`. Ikony všech propojených aplikací jsou v `static/aplikace/<id>.svg` a ukazují se tam, kde je řeč o jiné aplikaci (Nastavení → Propojené aplikace, štítek „propojeno“). Nikdy je nenahrazuj barevným čtverečkem s písmenem.
 
 ## Prvky
 
@@ -60,5 +60,5 @@ Ikona pro web je `static/icon.svg`. Ikony všech aplikací systému jsou v `stat
 - **Instalace:** `<Nazev>.zip` z GitHub Releases. Aplikace si při prvním spuštění zkopíruje kód do `~/Library/Application Support/<Nazev>` a když na Macu není Python, stáhne vlastní.
 - **Aktualizace:** při každém otevření se podívá na GitHub, nová verze se sama stáhne a nainstaluje (data se předtím zazálohují). Vydání = zvýšit `VERSION` a pushnout do `main`, GitHub Actions udělají zbytek.
 - **Živé obnovení:** stránka se každé 2 s (a při návratu do okna) zeptá na `GET /api/rev`, otisk dat a toho, co zveřejnily ostatní aplikace (`db.revision()`). Když se změnil, překreslí se (`router(false)`, pozice i hledání zůstanou). Nikdy pod rukama: ne během požadavku, s otevřeným dialogem, vybranými řádky, rozepsaným textem ani neuloženými změnami. Odpovědi na změny posílají hlavičku `X-Rev`, takže vlastní změnu stránka znovu nenačítá.
-- **Propojení:** `mejvos.py` a `docs/mejvos.md`.
+- **Propojení:** `propojeni.py` a `docs/propojeni.md`.
 - **Testy:** `python3 -m unittest discover tests` (data, server, aktualizace, propojení).

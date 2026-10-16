@@ -1,7 +1,7 @@
-"""MejvOS – propojení aplikací na jednom Macu (Faktury, Hodinovka a další, které přibudou).
+"""Propojení aplikací na jednom Macu (Faktury, Hodinovka a další, které přibudou).
 
 Každá aplikace má dál vlastní server a vlastní data. Ve sdílené složce
-~/Library/Application Support/MejvOS o sobě jen zveřejňuje:
+~/Library/Application Support/Propojené aplikace o sobě jen zveřejňuje:
 
     apps/<id>.json       kdo je, na jaké adrese běží, co umí a jak ji spustit (manifest)
     contacts/<id>.json   svoje kontakty (klienty) ve společném tvaru
@@ -11,10 +11,10 @@ Ostatní aplikace si tyhle soubory čtou, takže druhá aplikace kvůli tomu nem
 Když po ní chtějí něco udělat (třeba vystavit fakturu), zavolají její server přes call().
 Když neběží, spustí ji. Když ještě nikdy neběžela, ale je nainstalovaná, otevřou ji.
 A když na Macu chybí úplně, umí ji jedním kliknutím stáhnout z GitHubu a nainstalovat (install()).
-Nic dalšího se instalovat nemusí: složku MejvOS vytvoří ta aplikace, která se spustí první.
+Nic dalšího se instalovat nemusí: sdílenou složku vytvoří ta aplikace, která se spustí první.
 
 Tenhle soubor je stejný v každé aplikaci. Když ho měníš, zkopíruj ho do všech.
-Protokol pro nové aplikace popisuje docs/mejvos.md.
+Protokol pro nové aplikace popisuje docs/propojeni.md.
 """
 import json
 import os
@@ -29,14 +29,17 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-NAME = "MejvOS"  # název celého systému; podle něj se jmenuje i sdílená složka, proto ho neměň
-PROTOCOL = 1
-HOME = Path(os.environ.get("MEJVOS_DIR") or Path.home() / "Library/Application Support" / NAME)
+PROTOCOL = 2
+USER_AGENT = "propojeni"
+HOME = Path(os.environ.get("PROPOJENI_DIR") or Path.home() / "Library/Application Support/Propojené aplikace")
+# Do protokolu 1 byla sdílená složka tady. Přesune ji _move_old_home(), starší verze ostatních aplikací
+# ji pak najdou přes odkaz. Až mají všechny nainstalované aplikace protokol 2, odkaz zmizí.
+OLD_HOME = None if os.environ.get("PROPOJENI_DIR") else Path.home() / "Library/Application Support/MejvOS"
 # Zapisovat do sdílené složky smí jen opravdu spuštěný server (ne testy ani testovací data).
 ENABLED = False
 CONTACT_FIELDS = ("name", "ico", "dic", "street", "city", "zip", "country", "email")
 
-# Známé aplikace systému. Díky tomu se dají najít a nabídnout ke stažení, i když ještě nikdy neběžely.
+# Známé aplikace. Díky tomu se dají najít a nabídnout ke stažení, i když ještě nikdy neběžely.
 CATALOG = {
     "faktury": {
         "name": "Faktury",
@@ -111,7 +114,7 @@ def contact(c):
 # ---------- zveřejnění ----------
 
 def announce(app_id, *, name, version, port, root, provides, env=None):
-    """Při spuštění serveru: přihlásí aplikaci do systému (apps/<id>.json)."""
+    """Při spuštění serveru: zapíše aplikaci do sdílené složky (apps/<id>.json)."""
     entry = CATALOG.get(app_id, {})
     manifest = {
         "id": app_id,
@@ -129,7 +132,29 @@ def announce(app_id, *, name, version, port, root, provides, env=None):
         "updated_at": now(),
     }
     _publish_file(HOME / "apps" / f"{app_id}.json", manifest)
+    if ENABLED:
+        _move_old_home()
     return manifest
+
+
+def _move_old_home():
+    """Přesune sdílenou složku z dřívějšího místa (OLD_HOME) sem a na staré místo dá odkaz,
+    ať ji najdou i starší verze ostatních aplikací. Až mají všechny protokol 2, odkaz smaže."""
+    if OLD_HOME is None:
+        return
+    try:
+        if OLD_HOME.is_dir() and not OLD_HOME.is_symlink():
+            for src in sorted(OLD_HOME.glob("*/*.json")):  # novější soubor vyhraje
+                dst = HOME / src.relative_to(OLD_HOME)
+                if not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(src, dst)
+            shutil.rmtree(OLD_HOME)
+            OLD_HOME.symlink_to(HOME, target_is_directory=True)
+        if OLD_HOME.is_symlink() and all(m.get("protocol", 1) >= 2 for m in apps()):
+            OLD_HOME.unlink()
+    except OSError as e:  # sdílená složka nesmí shodit aplikaci
+        _log(f"nepodařilo se přesunout sdílenou složku: {e}")
 
 
 def publish(app_id, kind, items, **extra):
@@ -153,13 +178,17 @@ def _publish_file(path, value):
     try:
         _write_json(path, value)
     except OSError as e:  # sdílená složka nesmí shodit aplikaci
-        print(f"{NAME}: nepodařilo se zapsat {path}: {e}", file=sys.stderr, flush=True)
+        _log(f"nepodařilo se zapsat {path}: {e}")
+
+
+def _log(message):
+    print(f"Propojení aplikací: {message}", file=sys.stderr, flush=True)
 
 
 # ---------- ostatní aplikace ----------
 
 def apps(exclude=None):
-    """Aplikace přihlášené v systému (kromě exclude). Odinstalované (zmizel jejich spouštěč) vynechá."""
+    """Aplikace zapsané ve sdílené složce (kromě exclude). Odinstalované (zmizel jejich spouštěč) vynechá."""
     out = []
     for path in sorted((HOME / "apps").glob("*.json")):
         m = _read_json(path)
@@ -270,7 +299,7 @@ class _Offline(Exception):
 def _request(app, url, method, body, timeout):
     data = json.dumps(body, ensure_ascii=False).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method,
-                                 headers={"Content-Type": "application/json", "User-Agent": NAME})
+                                 headers={"Content-Type": "application/json", "User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read() or b"null")
@@ -329,7 +358,7 @@ def app_path(app_id):
 
 
 def _open_and_wait(app_id, path, capability=None, wait=180):
-    """Otevře aplikaci na pozadí a počká, až se přihlásí do systému. Poprvé si připravuje složku
+    """Otevře aplikaci na pozadí a počká, až se zapíše do sdílené složky. Poprvé si připravuje složku
     a případně stahuje Python, proto se čeká déle."""
     subprocess.run(["open", "-g", str(path)], check=False)
     deadline = time.monotonic() + wait
@@ -370,14 +399,14 @@ def install(app_id):
     if not entry:
         raise PeerError("Neznámá aplikace.")
     if sys.platform != "darwin":
-        raise PeerError("Aplikace systému jdou nainstalovat jen na Macu.")
+        raise PeerError("Další aplikace jdou nainstalovat jen na Macu.")
     path = app_path(app_id)
     if path is None:
         folder = Path("/Applications") if os.access("/Applications", os.W_OK) else Path.home() / "Applications"
         folder.mkdir(exist_ok=True)
         tmp = Path(tempfile.mkdtemp(prefix=f".{app_id}-", dir=folder))
         try:
-            req = urllib.request.Request(entry["download"], headers={"User-Agent": NAME})
+            req = urllib.request.Request(entry["download"], headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(req, timeout=300) as r:
                 (tmp / "app.zip").write_bytes(r.read())
             subprocess.run(["ditto", "-x", "-k", str(tmp / "app.zip"), str(tmp)], check=True)
@@ -395,7 +424,7 @@ def install(app_id):
 
 
 def overview(exclude):
-    """Stav systému pro Nastavení: všechny známé i přihlášené aplikace kromě sebe."""
+    """Propojené aplikace pro Nastavení: všechny známé i zapsané aplikace kromě sebe."""
     registered = {a["id"]: a for a in apps(exclude)}
     out = []
     for app_id in list(CATALOG) + [a for a in registered if a not in CATALOG]:
