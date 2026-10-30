@@ -127,9 +127,13 @@ const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
 const decimalInput = v => (v === '' || v == null ? '' : String(v).replace('.', ','));
 const byName = (a, b) => a.name.localeCompare(b.name, 'cs', { sensitivity: 'base' });
 const sum = list => list.reduce((s, i) => s + i.total, 0);
+const sumToPay = list => list.reduce((s, i) => s + toPay(i), 0); // co se platí: u konečné faktury bez záloh
 const sumAmount = list => list.reduce((s, i) => s + i.amount, 0); // příjmy bez faktury
-// Příjem patří do roku, kdy peníze přišly: zaplacené faktury podle data zaplacení + příjmy bez faktury za rok.
-const receivedIn = (year, active, incomes) => sum(active.filter(i => i.status === 'paid' && (i.paid_date || '').startsWith(year))) + sumAmount(incomes);
+// Vyfakturováno a obrat pro DPH: zálohové faktury ne, jejich částku obsahuje konečná faktura.
+const billed = list => list.filter(i => !isProforma(i));
+// Příjem patří do roku, kdy peníze přišly: zaplacené faktury a zálohy podle data zaplacení + příjmy bez faktury za rok.
+// Konečná faktura se počítá bez odečtených záloh, ty se započítaly už při zaplacení.
+const receivedIn = (year, active, incomes) => sumToPay(active.filter(i => i.status === 'paid' && (i.paid_date || '').startsWith(year))) + sumAmount(incomes);
 const ceilKc = n => Math.ceil(n - 1e-6); // daň a pojistné se zaokrouhlují na koruny nahoru
 const plural = (n, one, few, many) => `${n} ${n === 1 ? one : n >= 2 && n <= 4 ? few : many}`;
 const setTitle = t => (document.title = t ? `${t} – Faktury` : 'Faktury');
@@ -153,7 +157,8 @@ const sameData = (a, b, keys) => keys.every(k => String(a?.[k] ?? '') === String
 const addressLines = p => [p.street, [p.zip, p.city].filter(Boolean).join(' '), p.country].filter(Boolean);
 const archivUrl = (file, version) => `/archiv/${file.split('/').map(encodeURIComponent).join('/')}?v=${encodeURIComponent(version || '')}`;
 const pdfUrl = inv => archivUrl(inv.pdf_file, inv.updated_at);
-const pdfFileName = inv => `Faktura-${inv.number.replace(/[^\w.-]+/g, '-')}.pdf`;
+const pdfFileName = inv => `${isProforma(inv) ? 'Zalohova-faktura' : 'Faktura'}-${inv.number.replace(/[^\w.-]+/g, '-')}.pdf`;
+const invoiceName = inv => `${isProforma(inv) ? 'Zálohová faktura' : 'Faktura'} ${inv.number}`;
 const missingSettings = s => !s.name || !s.ico || !s.account;
 
 async function storePdf(inv) {
@@ -183,7 +188,7 @@ function askPaid(invoices) {
   dialog.innerHTML = `
     <form method="dialog">
       <h2 id="paid-title">Označit jako ${single ? 'zaplacenou' : 'zaplacené'}</h2>
-      <p class="muted" style="margin:0">${single ? `Faktura ${esc(invoices[0].number)}` : plural(invoices.length, 'faktura', 'faktury', 'faktur')} · ${Fmt.money(sum(invoices))}</p>
+      <p class="muted" style="margin:0">${single ? esc(invoiceName(invoices[0])) : plural(invoices.length, 'faktura', 'faktury', 'faktur')} · ${Fmt.money(sumToPay(invoices))}</p>
       <div class="choices" role="radiogroup" aria-label="Datum úhrady">
         <label><input type="radio" name="when" value="today" checked> Dnes <span class="muted">${Fmt.date(today)}</span></label>
         <label><input type="radio" name="when" value="due"> ${single ? `K datu splatnosti <span class="muted">${Fmt.date(invoices[0].due_date)}</span>` : 'K datu splatnosti každé faktury'}</label>
@@ -239,7 +244,7 @@ async function deleteInvoices(list, button) {
     !paid ? '' : one ? 'Faktura je už zaplacená.' : paid === 1 ? 'Jedna z nich je už zaplacená.' : `Zaplacených je mezi nimi ${paid}.`,
     apps.length ? `V aplikaci ${apps.join(' a ')} se odpracovaný čas vrátí mezi nevyfakturovaný.` : '',
   ];
-  if (!confirm(`Opravdu smazat ${one ? `fakturu ${list[0].number}` : plural(list.length, 'fakturu', 'faktury', 'faktur')}?\n\n${lines.filter(Boolean).join('\n\n')}`)) return false;
+  if (!confirm(`Opravdu smazat ${one ? `${isProforma(list[0]) ? 'zálohovou fakturu' : 'fakturu'} ${list[0].number}` : plural(list.length, 'fakturu', 'faktury', 'faktur')}?\n\n${lines.filter(Boolean).join('\n\n')}`)) return false;
   return Boolean(await attempt(async () => {
     await api('invoices/delete', { method: 'POST', body: { ids: list.map(i => i.id) } });
     toast(one ? 'Faktura smazána' : plural(list.length, 'faktura smazána', 'faktury smazány', 'faktur smazáno'));
@@ -251,7 +256,7 @@ function invoiceRows(rows, { selectable = false } = {}) {
   return rows.map(i => `
     <tr data-href="#/faktura/${i.id}" data-id="${i.id}">
       ${selectable ? `<td class="sel"><label><input type="checkbox" data-select="${i.id}" aria-label="Vybrat fakturu ${esc(i.number)}"></label></td>` : ''}
-      <td class="strong nowrap"><a href="#/faktura/${i.id}" style="color:inherit">${esc(i.number)}</a>${i.imported ? '<span class="tag hide-sm">převzatá</span>' : ''}</td>
+      <td class="strong nowrap"><a href="#/faktura/${i.id}" style="color:inherit">${esc(i.number)}</a>${isProforma(i) ? '<span class="tag">záloha</span>' : ''}${i.imported ? '<span class="tag hide-sm">převzatá</span>' : ''}</td>
       <td>${esc(i.customer.name)}<div class="show-sm">${statusLabel(i)}</div></td>
       <td class="nowrap hide-sm">${Fmt.date(i.issue_date)}</td>
       <td class="nowrap hide-sm">${Fmt.date(i.due_date)}</td>
@@ -285,7 +290,7 @@ async function viewDashboard(params) {
     const isCurrent = year === thisYear;
 
     const active = invoices.filter(i => i.status !== 'cancelled');
-    const inYear = active.filter(i => i.issue_date.startsWith(year));
+    const inYear = billed(active).filter(i => i.issue_date.startsWith(year));
     const incomesInYear = incomes.filter(i => i.date.startsWith(year));
     const unpaid = active.filter(i => i.status === 'issued');
     const overdue = unpaid.filter(i => i.due_date < today);
@@ -317,13 +322,13 @@ async function viewDashboard(params) {
     }
 
     const yearRows = years.slice().reverse().map(y => {
-      const list = active.filter(i => i.issue_date.startsWith(y));
+      const list = billed(active).filter(i => i.issue_date.startsWith(y));
       return { y, count: list.length, total: sum(list), received: receivedIn(y, active, incomes.filter(i => i.date.startsWith(y))) };
     });
 
     const turnover = sum(inYear) + sumAmount(incomesInYear);
     const vatLevel = limitLevel(turnover, VAT_LIMIT);
-    const alerts = isCurrent ? yearAlerts({ year, turnover, received, pending: sum(unpaid), settings }) : [];
+    const alerts = isCurrent ? yearAlerts({ year, turnover, received, pending: sumToPay(unpaid), settings }) : [];
     if (isCurrent && taxReturn.show) alerts.unshift(taxReturnAlert(taxReturn, { active, incomes, settings }));
 
     app.innerHTML = `
@@ -338,8 +343,8 @@ async function viewDashboard(params) {
         <div class="kpi"><div class="k">Příjmy ${isCurrent ? 'letos' : `v roce ${year}`}</div><div class="v">${Fmt.money0(received)}</div><div class="d">${incomesInYear.length
           ? `z toho ${Fmt.money0(sumAmount(incomesInYear))} bez faktury`
           : plural(paidInYear.length, 'zaplacená faktura', 'zaplacené faktury', 'zaplacených faktur')}</div></div>
-        <a class="kpi" href="#/faktury?rok=vse&stav=ceka"><div class="k">Čeká na platbu</div><div class="v">${Fmt.money0(sum(unpaid))}</div><div class="d">${plural(unpaid.length, 'faktura', 'faktury', 'faktur')}</div></a>
-        <a class="kpi" href="#/faktury?rok=vse&stav=po-splatnosti"><div class="k">Po splatnosti</div><div class="v${overdue.length ? ' bad' : ''}">${Fmt.money0(sum(overdue))}</div><div class="d">${plural(overdue.length, 'faktura', 'faktury', 'faktur')}</div></a>
+        <a class="kpi" href="#/faktury?rok=vse&stav=ceka"><div class="k">Čeká na platbu</div><div class="v">${Fmt.money0(sumToPay(unpaid))}</div><div class="d">${plural(unpaid.length, 'faktura', 'faktury', 'faktur')}</div></a>
+        <a class="kpi" href="#/faktury?rok=vse&stav=po-splatnosti"><div class="k">Po splatnosti</div><div class="v${overdue.length ? ' bad' : ''}">${Fmt.money0(sumToPay(overdue))}</div><div class="d">${plural(overdue.length, 'faktura', 'faktury', 'faktur')}</div></a>
       </div>
       <div class="dash-grid">
         <section class="card">
@@ -457,19 +462,22 @@ function yearAlerts({ year, turnover, received, pending, settings }) {
 /**
  * Varování k částce ve formuláři: když by faktura nebo příjem přetáhly limit pro DPH (obrat za rok
  * vystavení) nebo pro sociální pojištění (příjmy za rok zaplacení). invoices a incomes jsou ostatní
- * doklady, bez toho právě upravovaného.
+ * doklady, bez toho právě upravovaného. paid = kolik ještě přijde (konečná faktura bez záloh,
+ * záloha celá); do obratu se počítá amount (záloha nic, konečná faktura celá).
  */
-function amountAlerts({ amount, vatYear, paidYear, invoices, incomes, settings }) {
+function amountAlerts({ amount, paid = amount, vatYear, paidYear, invoices, incomes, settings }) {
   const alerts = [];
-  if (!(amount > 0) || !/^\d{4}$/.test(vatYear) || !/^\d{4}$/.test(paidYear)) return alerts;
+  if (!(amount > 0 || paid > 0) || !/^\d{4}$/.test(vatYear) || !/^\d{4}$/.test(paidYear)) return alerts;
   const add = (level, label, text) => level && alerts.push({ level, label, text });
   const money = Fmt.money0;
   const active = invoices.filter(i => i.status !== 'cancelled');
   const incomesIn = y => incomes.filter(i => i.date.startsWith(y));
 
-  const before = sum(active.filter(i => i.issue_date.startsWith(vatYear))) + sumAmount(incomesIn(vatYear));
+  const before = sum(billed(active).filter(i => i.issue_date.startsWith(vatYear))) + sumAmount(incomesIn(vatYear));
   const after = before + amount;
-  if (before <= VAT_LIMIT_NOW && after > VAT_LIMIT_NOW) {
+  if (!(amount > 0)) {
+    // záloha obrat nemění
+  } else if (before <= VAT_LIMIT_NOW && after > VAT_LIMIT_NOW) {
     add('bad', 'DPH', `obrat za rok ${vatYear} tím přesáhne ${money(VAT_LIMIT_NOW)}, takže plátcem DPH budeš hned ode dne po překročení.`);
   } else if (before <= VAT_LIMIT && after > VAT_LIMIT) {
     add('bad', 'DPH', `obrat za rok ${vatYear} tím přesáhne ${money(VAT_LIMIT)}, takže od 1. 1. ${Number(vatYear) + 1} budeš plátce DPH.`);
@@ -478,12 +486,12 @@ function amountAlerts({ amount, vatYear, paidYear, invoices, incomes, settings }
   }
 
   const limit = settings.side_activity && SOCIAL_LIMITS[paidYear];
-  if (limit) {
+  if (limit && paid > 0) {
     const rate = Number(settings.expense_rate) || 0;
     const max = socialMaxIncome(limit, rate);
-    const received = receivedIn(paidYear, active, incomesIn(paidYear)) + amount;
-    const pending = paidYear === isoDate().slice(0, 4) ? sum(active.filter(i => i.status === 'issued')) : 0;
-    if (received > max && received - amount <= max) {
+    const received = receivedIn(paidYear, active, incomesIn(paidYear)) + paid;
+    const pending = paidYear === isoDate().slice(0, 4) ? sumToPay(active.filter(i => i.status === 'issued')) : 0;
+    if (received > max && received - paid <= max) {
       add('bad', 'Sociální pojištění', `příjmy za rok ${paidYear} tím přesáhnou limit o ${money(received - max)} a pojištění vyjde na ${money(yearlyDues(received, rate, limit).social)}. Platba přijatá až v roce ${Number(paidYear) + 1} se počítá do dalšího roku.`);
     } else if (received <= max && received + pending > max) {
       add('bad', 'Sociální pojištění', `spolu s čekajícími platbami (${money(pending)}) by příjmy za rok ${paidYear} limit přesáhly.`);
@@ -518,7 +526,7 @@ function duesCard({ year, isCurrent, active, unpaid, incomes, settings }) {
   const rate = Number(settings.expense_rate) || 0;
   const limit = side ? SOCIAL_LIMITS[year] : 0;
   const received = receivedIn(year, active, incomes);
-  const pending = isCurrent ? sum(unpaid) : 0;
+  const pending = isCurrent ? sumToPay(unpaid) : 0;
   const total = d => d.tax + (side ? d.health + d.social : 0);
   const now = yearlyDues(received, rate, limit);
   const crosses = yearlyDues(received + pending, rate, limit).over && !now.over; // čekající platby by přetáhly limit
@@ -671,9 +679,8 @@ async function viewInvoices(params) {
         b.setAttribute('aria-pressed', String(b.dataset.stav === f.stav));
       });
       for (const id of [...selected]) if (!rows.some(r => r.id === id)) selected.delete(id);
-      const active = rows.filter(i => i.status !== 'cancelled');
       $('#list').innerHTML = rows.length
-        ? invoiceTable(rows, { selectable: true, footer: `${plural(rows.length, 'faktura', 'faktury', 'faktur')} · celkem ${Fmt.money(sum(active))}` })
+        ? invoiceTable(rows, { selectable: true, footer: listFooter(rows) })
         : `<div class="empty">${invoices.length ? 'Žádná faktura neodpovídá filtru.' : 'Zatím tu nejsou žádné faktury.<br><a class="btn primary" href="#/faktura/nova">Vystavit první fakturu</a>'}</div>`;
       $$('[data-select]').forEach(b => (b.checked = selected.has(Number(b.dataset.select))));
       updateBulk();
@@ -720,6 +727,14 @@ async function viewInvoices(params) {
   };
 }
 
+/** Patička seznamu: součet faktur a zvlášť záloh (jejich částka je i v konečné faktuře). */
+function listFooter(rows) {
+  const active = rows.filter(i => i.status !== 'cancelled');
+  const deposits = active.filter(isProforma);
+  return `${plural(rows.length, 'faktura', 'faktury', 'faktur')} · celkem ${Fmt.money(sum(billed(active)))}` +
+    (deposits.length ? ` · zálohy ${Fmt.money(sum(deposits))}` : '');
+}
+
 // ---------- faktura: detail ----------
 
 async function viewInvoice(params, id) {
@@ -729,15 +744,18 @@ async function viewInvoice(params, id) {
     inv = await api('invoices/' + id);
   }
   return () => {
-    setTitle(`Faktura ${inv.number}`);
+    setTitle(invoiceName(inv));
     const c = inv.customer;
     const url = inv.pdf_file ? pdfUrl(inv) : null;
+    const proforma = isProforma(inv);
+    const deposits = inv.deposits || [];
     app.innerHTML = `
       <a class="back" href="#/faktury">‹ Faktury</a>
       <div class="page-head">
-        <h1>Faktura ${esc(inv.number)} ${statusLabel(inv)}</h1>
+        <h1>${esc(invoiceName(inv))} ${statusLabel(inv)}</h1>
         <div class="actions">
           ${inv.status === 'issued' ? '<button class="btn" data-act="paid">Označit jako zaplacenou…</button>' : ''}
+          ${proforma && inv.status === 'paid' && !inv.settled_by ? `<a class="btn" href="#/faktura/nova?zaloha=${inv.id}">Vystavit konečnou fakturu</a>` : ''}
           <a class="btn" href="#/faktura/${inv.id}/upravit">Upravit</a>
           <a class="btn" href="#/faktura/nova?z=${inv.id}">Duplikovat</a>
           ${url ? `<a class="btn primary" href="${url}" download="${esc(pdfFileName(inv))}">Stáhnout PDF</a>` : ''}
@@ -747,7 +765,11 @@ async function viewInvoice(params, id) {
         <div>
           <div class="card">
             <dl class="facts">
-              <dt>Částka</dt><dd class="big">${Fmt.money(inv.total)}</dd>
+              <dt>${proforma ? 'Záloha' : 'Částka'}</dt><dd class="big">${Fmt.money(inv.total)}</dd>
+              ${deposits.length ? `
+                <dt>Odečtené zálohy</dt><dd>${deposits.map(d => `<a href="#/faktura/${d.id}">${esc(d.number)}</a> −${Fmt.money(d.amount)}`).join('<br>')}</dd>
+                <dt>Zbývá k úhradě</dt><dd class="strong">${Fmt.money(toPay(inv))}</dd>` : ''}
+              ${inv.settled_by ? `<dt>Vyúčtováno</dt><dd>na faktuře <a href="#/faktura/${inv.settled_by.id}">${esc(inv.settled_by.number)}</a></dd>` : ''}
               <dt>Odběratel</dt>
               <dd>${inv.contact_id ? `<a href="#/kontakt/${inv.contact_id}">${esc(c.name)}</a>` : esc(c.name)}
                 <div class="muted">${[...addressLines(c), c.ico && `IČO ${c.ico}`].filter(Boolean).map(esc).join('<br>')}</div></dd>
@@ -768,7 +790,7 @@ async function viewInvoice(params, id) {
             <button class="btn ghost danger" data-act="delete">Smazat…</button>
           </div>
         </div>
-        ${url ? `<iframe class="pdf-frame" src="${url}" title="Náhled faktury ${esc(inv.number)}"></iframe>` : '<div class="card empty">PDF chybí.</div>'}
+        ${url ? `<iframe class="pdf-frame" src="${url}" title="Náhled: ${esc(invoiceName(inv))}"></iframe>` : '<div class="card empty">PDF chybí.</div>'}
       </div>`;
 
     const setStatus = async (status, paidDate) => {
@@ -781,7 +803,7 @@ async function viewInvoice(params, id) {
       paid: null, // řeší markPaid níže (dialog nemá točit kolečko)
       unpaid: () => setStatus('issued'),
       cancel: async () => {
-        if (!confirm(`Stornovat fakturu ${inv.number}?\n\nZůstane v evidenci i v číselné řadě, jen se označí jako stornovaná.`)) return;
+        if (!confirm(`Stornovat ${proforma ? 'zálohovou fakturu' : 'fakturu'} ${inv.number}?\n\nZůstane v evidenci i v číselné řadě, jen se označí jako stornovaná.`)) return;
         await setStatus('cancelled');
         toast('Faktura stornována');
       },
@@ -809,15 +831,21 @@ async function viewInvoiceForm(params, id) {
     api('settings'), api('contacts'), api('invoices'), api('incomes'), api('offered').catch(() => [])]);
   contacts.sort(byName);
   let inv;
+  const numbers = {}; // navržená čísla pro novou fakturu a zálohovou fakturu (vlastní řada)
   if (id) {
     inv = await api('invoices/' + id);
   } else {
-    const source = params.get('z') ? await api('invoices/' + params.get('z')) : null;
+    // z = duplikovat fakturu, zaloha = konečná faktura k zaplacené záloze (odečte ji)
+    const deposit = params.get('zaloha') ? await api('invoices/' + params.get('zaloha')) : null;
+    const source = deposit || (params.get('z') ? await api('invoices/' + params.get('z')) : null);
     const contact = contacts.find(c => c.id === (source ? source.contact_id : Number(params.get('kontakt'))));
-    const { number } = await api('next-number');
+    [numbers.invoice, numbers.proforma] = (await Promise.all([api('next-number'), api('next-number/zaloha')])).map(r => r.number);
+    const kind = !deposit && (source ? isProforma(source) : params.get('druh') === 'zaloha') ? 'proforma' : 'invoice';
     const issue = isoDate();
     inv = {
-      number,
+      kind,
+      number: numbers[kind],
+      deposits: deposit ? [{ id: deposit.id, number: deposit.number, paid_date: deposit.paid_date, amount: deposit.total }] : [],
       status: 'issued',
       issue_date: issue,
       due_date: addDays(issue, Number(settings.due_days) || 14),
@@ -827,13 +855,24 @@ async function viewInvoiceForm(params, id) {
       note: source?.note ?? '',
     };
   }
-  return () => renderInvoiceForm(inv, id, settings, contacts, { invoices: invoices.filter(i => i.id !== inv.id), incomes }, offered);
+  return () => renderInvoiceForm(inv, id, settings, contacts, { invoices: invoices.filter(i => i.id !== inv.id), incomes }, offered, numbers);
 }
 
-/** others = ostatní faktury a příjmy pro varování u limitů, offered = kontakty z ostatních aplikací */
-function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
-  setTitle(id ? `Upravit fakturu ${inv.number}` : 'Nová faktura');
+/** Patří zálohová faktura stejnému odběrateli? Podle kontaktu, jinak podle IČO, jinak podle názvu. */
+function sameCustomer(p, contactId, customer) {
+  if (contactId && p.contact_id) return p.contact_id === contactId;
+  if (customer?.ico && p.customer.ico) return p.customer.ico === customer.ico;
+  return Boolean(customer?.name) && p.customer.name.trim().toLowerCase() === customer.name.trim().toLowerCase();
+}
+
+/**
+ * others = ostatní faktury a příjmy pro varování u limitů, offered = kontakty z ostatních aplikací,
+ * numbers = navržená čísla nové faktury a zálohové faktury
+ */
+function renderInvoiceForm(inv, id, settings, contacts, others, offered = [], numbers = {}) {
   const state = {
+    kind: inv.kind || 'invoice',
+    deposits: new Set((inv.deposits || []).map(d => d.id)), // odečtené zálohy
     contactId: inv.contact_id,
     customer: inv.customer,
     isNew: false,
@@ -845,12 +884,25 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
   leaveGuard = () => dirty;
 
   const backHref = id ? `#/faktura/${id}` : '#/faktury';
+  const heading = () => (id ? `Upravit ${state.kind === 'proforma' ? 'zálohovou fakturu' : 'fakturu'} ${inv.number}`
+    : state.kind === 'proforma' ? 'Nová zálohová faktura' : 'Nová faktura');
+  const submitLabel = () => (inv.imported ? 'Uložit' : id ? 'Uložit a přegenerovat PDF'
+    : state.kind === 'proforma' ? 'Vystavit zálohovou fakturu' : 'Vystavit fakturu');
+  setTitle(heading());
+  // Zálohy, které jde odečíst: zaplacené, ještě neodečtené jinde (nebo už na téhle faktuře).
+  const paidDeposits = others.invoices.filter(i => isProforma(i) && i.status === 'paid' && (!i.settled_by || i.settled_by.id === id));
+  const knownDeposits = new Map([...(inv.deposits || []), ...paidDeposits.map(p => ({ id: p.id, number: p.number, paid_date: p.paid_date, amount: p.total }))]
+    .map(d => [d.id, d]));
   const currentSupplier = Object.fromEntries(SUPPLIER_FIELDS.map(k => [k, settings[k] ?? '']));
   const supplierChanged = id && !inv.imported && !sameData(inv.supplier, currentSupplier, SUPPLIER_FIELDS);
 
   app.innerHTML = `
     <a class="back" href="${backHref}">‹ ${id ? 'Zpět na fakturu' : 'Faktury'}</a>
-    <div class="page-head"><h1>${id ? `Upravit fakturu ${esc(inv.number)}` : 'Nová faktura'}</h1></div>
+    <div class="page-head">
+      <h1 id="form-title">${esc(heading())}</h1>
+      ${id ? '' : `<div class="segmented" role="group" aria-label="Druh faktury">${[['invoice', 'Faktura'], ['proforma', 'Zálohová faktura']].map(([k, t]) =>
+        `<button type="button" data-kind="${k}" class="${state.kind === k ? 'on' : ''}" aria-pressed="${state.kind === k}">${t}</button>`).join('')}</div>`}
+    </div>
     ${missingSettings(settings) ? '<div class="notice">Chybí tvoje údaje nebo číslo účtu – doplň je v <a href="#/nastaveni">Nastavení</a>, jinak nebudou na faktuře.</div>' : ''}
     ${inv.imported ? '<div class="notice info">Převzatá faktura – změny se uloží do evidence, PDF zůstane původní.</div>' : ''}
     <form id="invoice-form" autocomplete="off" novalidate>
@@ -869,6 +921,7 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
           ${field('Datum vystavení', 'name="issue_date" required', inv.issue_date, { cls: 'c2', type: 'date' })}
           ${field('Datum splatnosti', 'name="due_date" required', inv.due_date, { cls: 'c2', type: 'date' })}
         </div>
+        <p class="hint" id="kind-hint" ${state.kind === 'proforma' ? '' : 'hidden'}>Zálohová faktura má vlastní číselnou řadu. Do vyfakturovaného se nepočítá, do příjmů až po zaplacení. Zaplacenou zálohu pak odečteš na konečné faktuře.</p>
       </section>
       <section class="card">
         <h2>Položky</h2>
@@ -878,7 +931,8 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
         </table>
         <datalist id="units">${UNITS.map(u => `<option value="${u}"></option>`).join('')}</datalist>
         <button type="button" class="btn ghost" id="add-item" style="margin-top:8px">+ Přidat položku</button>
-        <div class="total-row"><span class="muted">Celkem k úhradě</span><strong id="total"></strong></div>
+        <div id="deposits"></div>
+        <div class="total-row"><span class="muted" id="total-label">Celkem k úhradě</span><strong id="total"></strong></div>
         <div class="alerts" id="limit-alerts"></div>
       </section>
       <section class="card">
@@ -892,7 +946,7 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
       </section>
       <div class="form-actions">
         <a class="btn" href="${backHref}">Zrušit</a>
-        <button type="submit" class="btn primary">${inv.imported ? 'Uložit' : id ? 'Uložit a přegenerovat PDF' : 'Vystavit fakturu'}</button>
+        <button type="submit" class="btn primary" id="submit">${submitLabel()}</button>
       </div>
     </form>`;
 
@@ -916,7 +970,10 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
           ${field('Stát (jen pokud není ČR)', 'data-c="country"', c.country, { cls: 'c2' })}
         </div>
         <p class="hint">${state.peer ? `Klient z aplikace ${esc(state.peer.app_name)} – doplň, co chybí (třeba IČO z ARES). Uloží se do kontaktů.` : 'Nový odběratel se zároveň uloží do kontaktů.'}</p>`;
-      $$('[data-c]', box).forEach(el => (el.oninput = () => (state.customer[el.dataset.c] = el.value)));
+      $$('[data-c]', box).forEach(el => (el.oninput = () => {
+        state.customer[el.dataset.c] = el.value;
+        if (el.dataset.c === 'name' || el.dataset.c === 'ico') drawDeposits();
+      }));
       $('[data-ares]', box).onclick = e => attempt(async () => {
         Object.assign(state.customer, await loadAres(state.customer.ico));
         markDirty();
@@ -942,6 +999,7 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
     } else {
       box.innerHTML = '<p class="hint" style="margin:0">Vyber odběratele z kontaktů, nebo přidej nového.</p>';
     }
+    drawDeposits();
   };
   const search = $('#contact-search');
   search.addEventListener('input', () => {
@@ -978,13 +1036,55 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
   if (els.is_paid) els.is_paid.addEventListener('change', () => (els.paid_date.hidden = !els.is_paid.checked));
 
   // Varování u limitů: DPH podle roku vystavení, sociální pojištění podle roku zaplacení (jinak splatnosti).
-  const updateLimits = amount => {
+  const updateLimits = (total, payable) => {
     if (inv.status === 'cancelled') return;
     const paidDate = els.is_paid?.checked ? els.paid_date.value : els.due_date.value;
+    const proforma = state.kind === 'proforma';
     $('#limit-alerts').innerHTML = alertList(amountAlerts({
-      amount, vatYear: els.issue_date.value.slice(0, 4), paidYear: paidDate.slice(0, 4), ...others, settings,
+      amount: proforma ? 0 : total, paid: payable, vatYear: els.issue_date.value.slice(0, 4), paidYear: paidDate.slice(0, 4), ...others, settings,
     }));
   };
+
+  // --- zálohy (jen u konečné faktury) ---
+  const depositsBox = $('#deposits');
+  const drawDeposits = () => {
+    const list = [...knownDeposits.values()].filter(d => {
+      const p = paidDeposits.find(x => x.id === d.id);
+      return state.deposits.has(d.id) || (p && sameCustomer(p, state.contactId, state.customer));
+    });
+    depositsBox.innerHTML = state.kind === 'invoice' && list.length ? `
+      <div class="deposits">
+        <h3>Zaplacené zálohy</h3>
+        ${list.map(d => `
+          <label class="check"><input type="checkbox" data-deposit="${d.id}" ${state.deposits.has(d.id) ? 'checked' : ''}>
+            <span>Odečíst zálohu ${esc(d.number)} <span class="muted">zaplacenou ${Fmt.date(d.paid_date)}</span></span>
+            <span class="num">−${Fmt.money(d.amount)}</span></label>`).join('')}
+      </div>` : '';
+    updateTotals();
+  };
+  depositsBox.addEventListener('change', e => {
+    const did = Number(e.target.dataset.deposit);
+    e.target.checked ? state.deposits.add(did) : state.deposits.delete(did);
+    updateTotals();
+  });
+  const chosenDeposits = () => (state.kind === 'invoice' ? [...state.deposits] : []);
+
+  // --- druh faktury (jen u nové) ---
+  $$('[data-kind]').forEach(b => (b.onclick = () => {
+    const old = state.kind;
+    state.kind = b.dataset.kind;
+    $$('[data-kind]').forEach(x => {
+      x.classList.toggle('on', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    // navržené číslo se vymění, ručně přepsané zůstane
+    if (els.number.value === numbers[old]) els.number.value = numbers[state.kind];
+    $('#form-title').textContent = heading();
+    setTitle(heading());
+    $('#kind-hint').hidden = state.kind !== 'proforma';
+    $('#submit').textContent = submitLabel();
+    drawDeposits();
+  }));
   form.addEventListener('change', () => updateTotals());
 
   // --- položky ---
@@ -997,8 +1097,11 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
       total += amount;
       $('[data-amount]', tr).textContent = Fmt.money(amount, false);
     });
-    $('#total').textContent = Fmt.money(round2(total));
-    updateLimits(round2(total));
+    total = round2(total);
+    const payable = toPay({ total, deposits: chosenDeposits().map(d => knownDeposits.get(d)) });
+    $('#total-label').textContent = chosenDeposits().length ? `Celkem ${Fmt.money(total)} · zbývá k úhradě` : 'Celkem k úhradě';
+    $('#total').textContent = Fmt.money(payable);
+    updateLimits(total, payable);
   };
   const drawItems = () => {
     tbody.innerHTML = state.items.map((it, i) => `
@@ -1053,6 +1156,8 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
         throw new Error('Přidej aspoň jednu položku.');
       }
       const body = {
+        kind: state.kind,
+        deposits: chosenDeposits(),
         number: els.number.value,
         issue_date: els.issue_date.value,
         due_date: els.due_date.value,
@@ -1071,13 +1176,13 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = []) {
       const saved = await api(id ? `invoices/${id}` : 'invoices', { method: id ? 'PUT' : 'POST', body });
       if (!saved.imported) await storePdf(saved);
       leaveGuard = null;
-      toast(id ? 'Faktura uložena' : `Faktura ${saved.number} vystavena`);
+      toast(id ? 'Faktura uložena' : `${invoiceName(saved)} vystavena`);
       location.hash = `#/faktura/${saved.id}`;
     }, e.submitter);
   };
 
-  drawCustomer();
   drawItems();
+  drawCustomer();
 }
 
 // ---------- příjem bez faktury ----------
@@ -1242,7 +1347,7 @@ async function viewContactForm(params, id) {
         </div>
       </form>
       ${id ? `<h2 style="margin-top:32px">Faktury</h2>
-        ${theirs.length ? `<div class="table-card">${invoiceTable(theirs, { footer: `${plural(theirs.length, 'faktura', 'faktury', 'faktur')} · celkem ${Fmt.money(sum(theirs.filter(i => i.status !== 'cancelled')))}` })}</div>` : '<p class="muted">Zatím žádné.</p>'}` : ''}`;
+        ${theirs.length ? `<div class="table-card">${invoiceTable(theirs, { footer: listFooter(theirs) })}</div>` : '<p class="muted">Zatím žádné.</p>'}` : ''}`;
 
     const form = $('#contact-form');
     form.addEventListener('input', () => (dirty = true));

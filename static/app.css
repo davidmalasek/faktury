@@ -206,6 +206,7 @@ select {
 .inline input { flex: 1; min-width: 0; }
 .hint { display: block; font-size: 13px; color: var(--muted); font-weight: 400; margin: 6px 0 0; }
 .hint.ok { color: var(--good-text); } .hint.bad { color: var(--bad-text); }
+.hint[hidden] { display: none; }
 .check { display: inline-flex; gap: 10px; align-items: center; color: var(--text); font-size: 14px; font-weight: 400; min-height: 32px; cursor: pointer; }
 .check-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 .check-row input[type="date"] { width: auto; }
@@ -409,6 +410,10 @@ table.items tbody tr { animation: fade 0.2s; }
 }
 .total-row { display: flex; justify-content: flex-end; align-items: baseline; gap: 14px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .total-row strong { font-size: 26px; letter-spacing: -0.03em; }
+.deposits { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.deposits h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0 0 4px; }
+.deposits .check { display: flex; }
+.deposits .check .num { margin-left: auto; font-variant-numeric: tabular-nums; }
 .form-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
 
 /* ---------- dialog ---------- */

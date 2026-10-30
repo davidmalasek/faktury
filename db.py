@@ -54,6 +54,10 @@ SUPPLIER_FIELDS = ("name", "street", "city", "zip", "ico", "registration", "acco
 CUSTOMER_FIELDS = ("name", "ico", "dic", "street", "city", "zip", "country", "email")
 CONTACT_FIELDS = CUSTOMER_FIELDS + ("note",)
 STATUSES = ("issued", "paid", "cancelled")
+# Zálohová faktura (proforma) má vlastní číselnou řadu s předponou Z a do vyfakturovaného se nepočítá.
+# Zaplacená záloha se odečte na konečné faktuře (deposits), do příjmů se počítá podle data zaplacení.
+KINDS = ("invoice", "proforma")
+PROFORMA_PREFIX = "Z"
 # Doklad k příjmu bez faktury: rozpozná se podle začátku souboru.
 DOC_KINDS = ((b"%PDF", ".pdf"), (b"\x89PNG", ".png"), (b"\xff\xd8\xff", ".jpg"))
 
@@ -305,9 +309,9 @@ def _trash(name):
         shutil.move(path, SMAZANE / f"{stamp}-{path.name}")
 
 
-def pdf_name(number, issue_date):
+def pdf_name(number, issue_date, proforma=False):
     safe = re.sub(r"[^\w.-]+", "-", number, flags=re.ASCII).strip("-") or "faktura"
-    return f"{issue_date[:4]}/Faktura-{safe}.pdf"
+    return f"{issue_date[:4]}/{'Zalohova-faktura' if proforma else 'Faktura'}-{safe}.pdf"
 
 
 # ---------- nastavení ----------
@@ -348,7 +352,7 @@ def list_contacts(data):
     for inv in data["invoices"]:
         st = stats.setdefault(inv.get("contact_id"), [0, 0.0])
         st[0] += 1
-        if inv["status"] != "cancelled":
+        if inv["status"] != "cancelled" and not is_proforma(inv):  # záloha je i v konečné faktuře
             st[1] += inv["total"]
     return [{**c, "invoice_count": stats.get(c["id"], [0])[0],
              "invoiced": round(stats.get(c["id"], [0, 0.0])[1], 2)} for c in data["contacts"]]
@@ -398,11 +402,63 @@ def find_contact(data, customer):
 # ---------- faktury ----------
 
 def list_invoices(data):
-    return sorted(data["invoices"], key=lambda i: (i["issue_date"], i["number"]), reverse=True)
+    return sorted((invoice_view(data, i) for i in data["invoices"]),
+                  key=lambda i: (i["issue_date"], i["number"]), reverse=True)
 
 
 def get_invoice(data, iid):
     return _find(data["invoices"], iid, "Faktura")
+
+
+def invoice_view(data, inv):
+    """Faktura pro stránku: u zálohové navíc, na které faktuře je odečtená (settled_by)."""
+    if not is_proforma(inv):
+        return inv
+    by = settled_by(data, inv["id"])
+    return {**inv, "settled_by": {"id": by["id"], "number": by["number"]} if by else None}
+
+
+def is_proforma(inv):
+    return inv.get("kind") == "proforma"
+
+
+def settled_by(data, pid):
+    """Platná (nestornovaná) faktura, na které je záloha `pid` odečtená, nebo None."""
+    return next((inv for inv in data["invoices"] if inv["status"] != "cancelled"
+                 and any(d["id"] == pid for d in inv.get("deposits") or [])), None)
+
+
+def to_pay(inv):
+    """Kolik má odběratel zaplatit: částka faktury minus odečtené zálohy."""
+    return _money(Decimal(str(inv["total"])) - sum((Decimal(str(d["amount"])) for d in inv.get("deposits") or []), Decimal(0)))
+
+
+def _clean_deposits(data, ids, invoice=None):
+    """Zaplacené zálohové faktury, které se odečtou na konečné faktuře (snímek čísla, data a částky)."""
+    try:
+        ids = list(dict.fromkeys(int(i) for i in ids or []))
+    except (TypeError, ValueError):
+        raise ValueError("Neplatná zálohová faktura.") from None
+    out = []
+    for pid in ids:
+        p = get_invoice(data, pid)
+        if not is_proforma(p):
+            raise ValueError(f"Faktura {p['number']} není zálohová.")
+        if p["status"] != "paid":
+            raise ValueError(f"Záloha {p['number']} ještě není zaplacená, a tak se nedá odečíst.")
+        by = settled_by(data, pid)
+        if by and by is not invoice:
+            raise ValueError(f"Záloha {p['number']} je už odečtená na faktuře {by['number']}.")
+        out.append({"id": p["id"], "number": p["number"], "paid_date": p["paid_date"], "amount": p["total"]})
+    return out
+
+
+def _guard_settled(data, inv, action):
+    """Odečtenou zálohu nejde smazat, stornovat ani vrátit mezi nezaplacené – konečná faktura s ní počítá."""
+    by = is_proforma(inv) and settled_by(data, inv["id"])
+    if by:
+        raise ValueError(f"Záloha {inv['number']} je odečtená na faktuře {by['number']}, a tak ji nejde {action}. "
+                         f"Nejdřív ji z té faktury odeber.")
 
 
 def _clean_items(items):
@@ -436,6 +492,9 @@ def save_invoice(data, values, iid=None):
     """Vytvoří nebo upraví fakturu. Údaje dodavatele se berou z Nastavení jen při vytvoření
     (nebo když o to uživatel výslovně požádá), aby se staré faktury samy neměnily."""
     existing = get_invoice(data, iid) if iid is not None else None
+    kind = existing.get("kind", "invoice") if existing else _text(values.get("kind")) or "invoice"
+    if kind not in KINDS:
+        raise ValueError("Neplatný druh faktury.")
 
     number = _text(values.get("number"))
     if not number:
@@ -473,10 +532,26 @@ def save_invoice(data, values, iid=None):
     if status not in STATUSES:
         raise ValueError("Neplatný stav faktury.")
     paid_date = values.get("paid_date", existing["paid_date"] if existing else None) or None
+
+    deposits = []
+    if kind == "proforma":
+        if existing and settled_by(data, existing["id"]) and (total != existing["total"] or status != "paid"):
+            _guard_settled(data, existing, "změnit částku ani stav")
+    else:
+        given = values.get("deposits")
+        if given is None and existing:  # beze změny, jen se obnoví čísla a částky záloh
+            given = [d["id"] for d in existing.get("deposits") or []]
+        deposits = _clean_deposits(data, given, existing)
+        paid_deposits = sum((Decimal(str(d["amount"])) for d in deposits), Decimal(0))
+        if paid_deposits > Decimal(str(total)):
+            raise ValueError("Zálohy jsou vyšší než částka faktury. Přidej položky, nebo některou zálohu neodečítej.")
+        if deposits and paid_deposits == Decimal(str(total)) and status == "issued":
+            status, paid_date = "paid", issue  # všechno už přišlo zálohou, není co platit
     if status == "paid":
         paid_date = _date(paid_date or date.today().isoformat(), "Datum úhrady")
 
     fields = {
+        "kind": kind,
         "number": number,
         "contact_id": contact_id,
         "customer": customer,
@@ -485,6 +560,7 @@ def save_invoice(data, values, iid=None):
         "due_date": due,
         "items": items,
         "total": total,
+        "deposits": deposits,
         "vs": variable_symbol(number),
         "note": _text(values.get("note")),
         "status": status,
@@ -567,6 +643,10 @@ def set_status(data, iid, status, paid_date=None):
     if status not in STATUSES:
         raise ValueError("Neplatný stav faktury.")
     inv = get_invoice(data, iid)
+    if status != "paid":
+        _guard_settled(data, inv, "stornovat" if status == "cancelled" else "vrátit mezi nezaplacené")
+    if inv["status"] == "cancelled" and status != "cancelled" and inv.get("deposits"):
+        _clean_deposits(data, [d["id"] for d in inv["deposits"]], inv)  # zálohy mezitím nesmí být odečtené jinde
     inv["status"] = status
     inv["paid_date"] = _date(paid_date or date.today().isoformat(), "Datum úhrady") \
         if status == "paid" else None
@@ -587,7 +667,7 @@ def store_pdf(data, iid, content):
     inv = get_invoice(data, iid)
     if not content.startswith(b"%PDF"):
         raise ValueError("Soubor není PDF.")
-    name = pdf_name(inv["number"], inv["issue_date"])
+    name = pdf_name(inv["number"], inv["issue_date"], is_proforma(inv))
     path = ARCHIV / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
@@ -612,6 +692,7 @@ def delete_invoice(data, iid):
     """Smaže fakturu z evidence. Její PDF se nemaže, jen přesune do data/smazane.
     Faktura z jiné aplikace si to zapamatuje, ať ji zruší i tam (viz publish)."""
     inv = get_invoice(data, iid)
+    _guard_settled(data, inv, "smazat")
     data["invoices"].remove(inv)
     if inv["pdf_file"]:
         _trash(inv["pdf_file"])
@@ -633,7 +714,8 @@ def delete_invoices(data, ids):
         raise ValueError("Nevybral jsi žádnou fakturu.")
     for iid in ids:
         get_invoice(data, iid)
-    for iid in ids:
+    # Nejdřív konečné faktury, ať jdou smazat spolu se zálohami, které na nich jsou odečtené.
+    for iid in sorted(ids, key=lambda i: is_proforma(get_invoice(data, i))):
         delete_invoice(data, iid)
     return {"deleted": len(ids)}
 
@@ -714,11 +796,16 @@ def _number_parts(number, year):
     return head + tail[:m.start()], m.group(1), m.group(2)
 
 
-def next_number(data):
+def next_number(data, proforma=False):
     """Navrhne další číslo faktury podle formátu dosavadních faktur.
-    Řada s rokem v čísle začíná každý rok od 1, řada bez roku pokračuje dál."""
+    Řada s rokem v čísle začíná každý rok od 1, řada bez roku pokračuje dál.
+    Zálohové faktury mají vlastní řadu; první záloha převezme formát faktur s předponou Z."""
     year = str(date.today().year)
-    rows = sorted(data["invoices"], key=lambda i: (i["issue_date"], i["id"]))
+    every = sorted(data["invoices"], key=lambda i: (i["issue_date"], i["id"]))
+    rows = [i for i in every if is_proforma(i) == proforma]
+    if proforma and not rows:
+        first = _first_number([i for i in every if not is_proforma(i)], year)
+        return _free_number(PROFORMA_PREFIX + first, year, {r["number"] for r in every})
     best = None
     for r in rows:
         y = r["issue_date"][:4]
@@ -730,19 +817,24 @@ def next_number(data):
     if best:
         head, seq, tail = best
         candidate = f"{head}{int(seq) + 1:0{len(seq)}d}{tail}"
-    elif rows:
+    else:
+        candidate = _first_number(rows, year)
+    return _free_number(candidate, year, {r["number"] for r in every})
+
+
+def _first_number(rows, year):
+    """První číslo v roce `year` ve formátu poslední faktury (2025012 → 2026001)."""
+    if rows:
         last = rows[-1]
         y = last["issue_date"][:4]
         parts = _number_parts(last["number"], y)
         if parts and y in last["number"]:
             head, seq, tail = parts
-            candidate = f"{head.replace(y, year)}{1:0{len(seq)}d}{tail}"
-        else:
-            candidate = f"{year}0001"
-    else:
-        candidate = f"{year}0001"
+            return f"{head.replace(y, year)}{1:0{len(seq)}d}{tail}"
+    return f"{year}0001"
 
-    taken = {r["number"] for r in rows}
+
+def _free_number(candidate, year, taken):
     while candidate in taken:
         head, seq, tail = _number_parts(candidate, year) or ("", "0", "")
         candidate = f"{head}{int(seq) + 1:0{len(seq)}d}{tail}"

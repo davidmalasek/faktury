@@ -255,7 +255,7 @@ class Handler(BaseHTTPRequestHandler):
                 return db.delete_invoices(data, body.get("ids"))
             if isinstance(rid, int):
                 if sub is None and method == "GET":
-                    return db.get_invoice(data, rid)
+                    return db.invoice_view(data, db.get_invoice(data, rid))
                 if sub is None and method == "PUT":
                     return db.save_invoice(data, body, rid)
                 if sub is None and method == "DELETE":
@@ -301,8 +301,8 @@ class Handler(BaseHTTPRequestHandler):
         elif res == "priznani" and method == "GET":  # připomínka daňového přiznání za minulý rok
             return dane.tax_return(data)
 
-        elif res == "next-number" and method == "GET":
-            return {"number": db.next_number(data)}
+        elif res == "next-number" and method == "GET":  # /api/next-number/zaloha = řada zálohových faktur
+            return {"number": db.next_number(data, proforma=rid == "zaloha")}
 
         elif res == "zaloha" and method == "GET":
             return {**db.cloud_status, "data": str(db.DATA).replace(str(Path.home()), "~", 1)}

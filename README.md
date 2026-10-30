@@ -32,6 +32,7 @@ Faktury jsou celé zdarma: žádné předplatné, žádná placená verze, žád
 - **Víš, kolik zaplatíš.** Průběžně vidíš, kolik za rok zaplatíš na dani a pojištění, a v lednu ti Faktury připomenou daňové přiznání.
 - **Nepřetáhneš limity.** Faktury hlídají hranici pro DPH a u podnikání při studiu nebo zaměstnání i hranici, do které neplatíš sociální pojištění. Upozorní tě už u faktury, která by ji přetáhla.
 - **Nic ti neuteče.** Vidíš, kdo ještě nezaplatil a komu už prošla splatnost.
+- **Zálohy bez počítání.** Vystavíš zálohovou fakturu a na konečné faktuře se zaplacená záloha odečte sama.
 - **Měříš odpracovaný čas?** S [Hodinovkou](https://github.com/davidmalasek/hodinovka) ho vyfakturuješ jedním kliknutím.
 
 ## Instalace

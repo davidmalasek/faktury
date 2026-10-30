@@ -28,3 +28,12 @@ Měsíc před termínem se připomínka zbarví oranžově, týden před ním č
 Peníze, které ti přišly bez vystavené faktury (třeba vyúčtování od pořadatele), zapíšeš přes Faktury → **Příjem bez faktury**.
 Vyplníš datum přijetí, částku a od koho peníze přišly, a můžeš přiložit doklad (PDF, PNG nebo JPG).
 Takový příjem se nepočítá do číselné řady faktur, ale započítá se do daně a pojištění i do obratu pro DPH.
+
+## Zálohové faktury
+
+Zálohovou fakturu vystavíš přes **Nová faktura** přepínačem nahoře. Má vlastní číselnou řadu s předponou Z (třeba Z2026001), takže v řadě běžných faktur nevzniká díra.
+Do **Vyfakturováno** ani do obratu pro DPH se nepočítá, protože stejnou částku obsahuje konečná faktura. Do **Příjmů** (a tedy do daně a pojištění) se započítá podle data zaplacení, stejně jako zaplacená faktura.
+
+Konečnou fakturu vystavíš z detailu zaplacené zálohy tlačítkem **Vystavit konečnou fakturu**, nebo běžně přes Nová faktura: u odběratele, který má zaplacené a ještě neodečtené zálohy, je u položek nabídne k odečtení.
+Konečná faktura obsahuje celou částku (ta se počítá do vyfakturovaného a obratu), zaplacené zálohy se na ní odečtou a QR platba je jen na zbytek. Do příjmů se pak započítá jen ten zbytek. Když zálohy pokryjí celou částku, faktura je rovnou zaplacená.
+Odečtenou zálohu nejde smazat, stornovat ani vrátit mezi nezaplacené, dokud ji z konečné faktury neodebereš. Stornem konečné faktury se záloha uvolní pro jinou.

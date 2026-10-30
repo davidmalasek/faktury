@@ -174,6 +174,58 @@ class DataTests(TempData):
         self.assertEqual(nxt((f"FV-{last}-012", f"{last}-12-01")), f"FV-{YEAR}-001")
         self.assertEqual(nxt(("123", f"{last}-12-01")), "124")
 
+    def test_proforma_has_own_number_series(self):
+        with db.open_data(True) as data:
+            self.assertEqual(db.next_number(data, proforma=True), f"Z{YEAR}0001")
+            db.save_invoice(data, invoice(f"{YEAR}001"))
+            self.assertEqual(db.next_number(data, proforma=True), f"Z{YEAR}001")
+            p = db.save_invoice(data, invoice(f"Z{YEAR}001", kind="proforma"))
+            self.assertEqual(db.next_number(data), f"{YEAR}002")
+            self.assertEqual(db.next_number(data, proforma=True), f"Z{YEAR}002")
+            # druh se při úpravě nemění
+            self.assertEqual(db.save_invoice(data, invoice(f"Z{YEAR}001", kind="invoice"), p["id"])["kind"], "proforma")
+            self.assertEqual(db.store_pdf(data, p["id"], b"%PDF-1.4"), f"{YEAR}/Zalohova-faktura-Z{YEAR}001.pdf")
+
+    def test_paid_proforma_is_deducted_once(self):
+        with db.open_data(True) as data:
+            p = db.save_invoice(data, invoice("Z1", kind="proforma", items=[{"description": "Záloha", "price": 400}]))
+            with self.assertRaisesRegex(ValueError, "není zaplacená"):
+                db.save_invoice(data, invoice("1", deposits=[p["id"]]))
+            db.set_status(data, p["id"], "paid", f"{YEAR}-02-10")
+            final = db.save_invoice(data, invoice("1", deposits=[p["id"]]))
+            self.assertEqual(final["deposits"], [{"id": p["id"], "number": "Z1", "paid_date": f"{YEAR}-02-10", "amount": 400.0}])
+            self.assertEqual((final["total"], db.to_pay(final), final["status"]), (1000.0, 600.0, "issued"))
+            self.assertEqual(db.invoice_view(data, p)["settled_by"], {"id": final["id"], "number": "1"})
+            with self.assertRaisesRegex(ValueError, "už odečtená na faktuře 1"):
+                db.save_invoice(data, invoice("2", deposits=[p["id"]]))
+            with self.assertRaisesRegex(ValueError, "není zálohová"):
+                db.save_invoice(data, invoice("2", deposits=[final["id"]]))
+            # úprava bez deposits zálohy nechá, odečtenou zálohu nejde změnit ani smazat
+            self.assertEqual(len(db.save_invoice(data, invoice("1"), final["id"])["deposits"]), 1)
+            for action in (lambda: db.delete_invoice(data, p["id"]), lambda: db.set_status(data, p["id"], "issued"),
+                           lambda: db.set_status(data, p["id"], "cancelled"),
+                           lambda: db.save_invoice(data, invoice("Z1", status="paid"), p["id"])):
+                with self.assertRaisesRegex(ValueError, "odečtená na faktuře 1"):
+                    action()
+            # storno konečné faktury zálohu uvolní; zpátky jde, jen když ji mezitím nepoužila jiná
+            db.set_status(data, final["id"], "cancelled")
+            self.assertIsNone(db.invoice_view(data, p)["settled_by"])
+            other = db.save_invoice(data, invoice("2", deposits=[p["id"]]))
+            with self.assertRaisesRegex(ValueError, "už odečtená na faktuře 2"):
+                db.set_status(data, final["id"], "issued")
+            # smazat jde zálohu spolu s fakturou, na které je odečtená
+            db.delete_invoices(data, [p["id"], other["id"]])
+            self.assertEqual([i["number"] for i in data["invoices"]], ["1"])
+
+    def test_deposits_cannot_exceed_invoice(self):
+        with db.open_data(True) as data:
+            p = db.save_invoice(data, invoice("Z1", kind="proforma", status="paid", paid_date=f"{YEAR}-02-10"))
+            with self.assertRaisesRegex(ValueError, "vyšší než částka"):
+                db.save_invoice(data, invoice("1", deposits=[p["id"]], items=[{"description": "Práce", "price": 999}]))
+            final = db.save_invoice(data, invoice("1", deposits=[p["id"]]))
+            # všechno přišlo zálohou, takže faktura je rovnou zaplacená
+            self.assertEqual((db.to_pay(final), final["status"], final["paid_date"]), (0.0, "paid", f"{YEAR}-03-01"))
+
     def test_mark_paid_many_is_all_or_nothing(self):
         with db.open_data(True) as data:
             a = db.save_invoice(data, invoice("1"))
@@ -599,6 +651,7 @@ class ServerTests(TempData):
         self.assertEqual(status, 201)
         self.assertEqual(self.call("PUT", f"/api/invoices/{inv['id']}/pdf", b"%PDF-1.4 x", ctype="application/pdf")[0], 200)
         self.assertEqual(self.call("GET", "/api/next-number")[1]["number"], f"{YEAR}0002")
+        self.assertEqual(self.call("GET", "/api/next-number/zaloha")[1]["number"], f"Z{YEAR}0001")
         status, paid = self.call("POST", "/api/invoices/status", {"changes": [{"id": inv["id"], "paid_date": f"{YEAR}-03-05"}]})
         self.assertEqual((status, paid[0]["status"]), (200, "paid"))
         self.assertEqual(self.stored()["invoices"][0]["paid_date"], f"{YEAR}-03-05")

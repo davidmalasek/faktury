@@ -24,6 +24,10 @@ const Fmt = {
   },
 };
 
+const isProforma = inv => inv.kind === 'proforma';
+/** Kolik má odběratel zaplatit: částka faktury minus odečtené zálohy. */
+const toPay = inv => Math.round((inv.total - (inv.deposits || []).reduce((s, d) => s + d.amount, 0)) * 100) / 100;
+
 /** "19-2000145399/0800" → { prefix: "19", number: "2000145399", bank: "0800" } */
 function parseCzAccount(account) {
   const m = String(account || '').replace(/\s/g, '').match(/^(?:(\d{1,6})-)?(\d{2,10})\/(\d{4})$/);
@@ -51,14 +55,15 @@ function czIban(account) {
 /** Text QR Platby (formát SPAYD, kterému rozumí české bankovní aplikace). */
 function spayd(inv) {
   const iban = (inv.supplier.iban || czIban(inv.supplier.account)).replace(/\s/g, '');
-  if (!iban || !(inv.total > 0)) return null;
+  const amount = toPay(inv);
+  if (!iban || !(amount > 0)) return null;
   const plain = (s, max) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/\*/g, ' ').trim().slice(0, max);
-  const parts = ['SPD', '1.0', 'ACC:' + iban, 'AM:' + inv.total.toFixed(2), 'CC:CZK'];
+  const parts = ['SPD', '1.0', 'ACC:' + iban, 'AM:' + amount.toFixed(2), 'CC:CZK'];
   if (inv.vs) parts.push('X-VS:' + inv.vs);
   parts.push('DT:' + inv.due_date.replace(/-/g, ''));
   if (inv.supplier.name) parts.push('RN:' + plain(inv.supplier.name, 35));
-  parts.push('MSG:' + plain('Faktura ' + inv.number, 60));
+  parts.push('MSG:' + plain((isProforma(inv) ? 'Zalohova faktura ' : 'Faktura ') + inv.number, 60));
   return parts.join('*');
 }
 
@@ -68,6 +73,8 @@ function invoiceDocument(inv) {
   const width = 595.28 - 2 * 50;
   const iban = s.iban || czIban(s.account);
   const qr = spayd(inv);
+  const title = isProforma(inv) ? 'Zálohová faktura' : 'Faktura';
+  const deposits = inv.deposits || [];
 
   const label = text => ({ text: text.toUpperCase(), fontSize: 7.5, color: gray, characterSpacing: 0.6, margin: [0, 0, 0, 5] });
   const rule = (top = 0, bottom = 0) => ({
@@ -123,9 +130,18 @@ function invoiceDocument(inv) {
       {
         width: '*',
         stack: [
-          { text: 'Celkem k úhradě', color: gray, ...right },
-          { text: Fmt.money(inv.total), fontSize: 20, bold: true, margin: [0, 2, 0, 6], ...right },
+          deposits.length ? {
+            table: {
+              widths: ['*', 'auto'],
+              body: [['Celkem', Fmt.money(inv.total)], ...deposits.map(d => [`Záloha ${d.number} zaplacená ${Fmt.date(d.paid_date)}`, '−' + Fmt.money(d.amount)])]
+                .map(([k, v]) => [{ text: k, color: gray, ...right }, { text: v, noWrap: true, ...right }]),
+            },
+            layout: { defaultBorder: false, paddingLeft: i => (i ? 12 : 0), paddingRight: () => 0, paddingTop: () => 2, paddingBottom: () => 2 },
+          } : '',
+          { text: deposits.length ? 'Zbývá k úhradě' : 'Celkem k úhradě', color: gray, margin: [0, deposits.length ? 8 : 0, 0, 0], ...right },
+          { text: Fmt.money(toPay(inv)), fontSize: 20, bold: true, margin: [0, 2, 0, 6], ...right },
           s.vat_note ? { text: s.vat_note, color: gray, ...right } : '',
+          isProforma(inv) ? { text: 'Zálohová faktura není daňový doklad.', color: gray, ...right } : '',
         ],
       },
     ],
@@ -135,13 +151,13 @@ function invoiceDocument(inv) {
   return {
     pageSize: 'A4',
     pageMargins: [50, 50, 50, 60],
-    info: { title: `Faktura ${inv.number}`, author: s.name },
+    info: { title: `${title} ${inv.number}`, author: s.name },
     defaultStyle: { font: 'Roboto', fontSize: 9.5, color: '#111827', lineHeight: 1.25 },
     watermark: inv.status === 'cancelled' ? { text: 'STORNOVÁNO', color: '#b91c1c', opacity: 0.12, bold: true } : undefined,
     content: [
       {
         columns: [
-          { text: 'Faktura', fontSize: 24, bold: true },
+          { text: title, fontSize: 24, bold: true },
           { stack: [{ ...label('Číslo faktury'), ...right }, { text: inv.number, fontSize: 14, bold: true, ...right }] },
         ],
         margin: [0, 0, 0, 30],
