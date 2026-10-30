@@ -35,5 +35,6 @@ Zálohovou fakturu vystavíš přes **Nová faktura** přepínačem nahoře. Má
 Do **Vyfakturováno** ani do obratu pro DPH se nepočítá, protože stejnou částku obsahuje konečná faktura. Do **Příjmů** (a tedy do daně a pojištění) se započítá podle data zaplacení, stejně jako zaplacená faktura.
 
 Konečnou fakturu vystavíš z detailu zaplacené zálohy tlačítkem **Vystavit konečnou fakturu**, nebo běžně přes Nová faktura: u odběratele, který má zaplacené a ještě neodečtené zálohy, je u položek nabídne k odečtení.
+Záloh může být na jedné faktuře víc. Z detailu zálohy se rovnou odečtou všechny zaplacené a neodečtené zálohy téhož odběratele (které nepatří k zakázce, odškrtneš) a faktura převezme jejich položky, které pak upravíš podle skutečnosti. Nezaplacené zálohy formulář ukáže, ale odečíst jdou až po zaplacení.
 Konečná faktura obsahuje celou částku (ta se počítá do vyfakturovaného a obratu), zaplacené zálohy se na ní odečtou a QR platba je jen na zbytek. Do příjmů se pak započítá jen ten zbytek. Když zálohy pokryjí celou částku, faktura je rovnou zaplacená.
 Odečtenou zálohu nejde smazat, stornovat ani vrátit mezi nezaplacené, dokud ji z konečné faktury neodebereš. Stornem konečné faktury se záloha uvolní pro jinou.

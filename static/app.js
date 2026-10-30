@@ -158,6 +158,7 @@ const addressLines = p => [p.street, [p.zip, p.city].filter(Boolean).join(' '), 
 const archivUrl = (file, version) => `/archiv/${file.split('/').map(encodeURIComponent).join('/')}?v=${encodeURIComponent(version || '')}`;
 const pdfUrl = inv => archivUrl(inv.pdf_file, inv.updated_at);
 const pdfFileName = inv => `${isProforma(inv) ? 'Zalohova-faktura' : 'Faktura'}-${inv.number.replace(/[^\w.-]+/g, '-')}.pdf`;
+const depositOf = p => ({ id: p.id, number: p.number, paid_date: p.paid_date, amount: p.total }); // záloha odečtená na faktuře
 const invoiceName = inv => `${isProforma(inv) ? 'Zálohová faktura' : 'Faktura'} ${inv.number}`;
 const missingSettings = s => !s.name || !s.ico || !s.account;
 
@@ -835,9 +836,14 @@ async function viewInvoiceForm(params, id) {
   if (id) {
     inv = await api('invoices/' + id);
   } else {
-    // z = duplikovat fakturu, zaloha = konečná faktura k zaplacené záloze (odečte ji)
+    // z = duplikovat fakturu, zaloha = konečná faktura k zaplacené záloze
     const deposit = params.get('zaloha') ? await api('invoices/' + params.get('zaloha')) : null;
     const source = deposit || (params.get('z') ? await api('invoices/' + params.get('z')) : null);
+    // Odečtou se i ostatní zaplacené a neodečtené zálohy stejného odběratele (jde je odškrtnout)
+    // a faktura převezme položky ze všech.
+    const deposits = deposit ? invoices.filter(i => isProforma(i) && i.status === 'paid' && !i.settled_by &&
+      (i.id === deposit.id || sameCustomer(i, deposit.contact_id, deposit.customer)))
+      .sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id - b.id) : [];
     const contact = contacts.find(c => c.id === (source ? source.contact_id : Number(params.get('kontakt'))));
     [numbers.invoice, numbers.proforma] = (await Promise.all([api('next-number'), api('next-number/zaloha')])).map(r => r.number);
     const kind = !deposit && (source ? isProforma(source) : params.get('druh') === 'zaloha') ? 'proforma' : 'invoice';
@@ -845,13 +851,13 @@ async function viewInvoiceForm(params, id) {
     inv = {
       kind,
       number: numbers[kind],
-      deposits: deposit ? [{ id: deposit.id, number: deposit.number, paid_date: deposit.paid_date, amount: deposit.total }] : [],
+      deposits: deposits.map(depositOf),
       status: 'issued',
       issue_date: issue,
       due_date: addDays(issue, Number(settings.due_days) || 14),
       contact_id: contact?.id ?? null,
       customer: contact ? pickCustomer(contact) : source?.customer ?? null,
-      items: source ? source.items : [{ description: '', quantity: 1, unit: '', price: '' }],
+      items: deposits.length ? deposits.flatMap(p => p.items) : source ? source.items : [{ description: '', quantity: 1, unit: '', price: '' }],
       note: source?.note ?? '',
     };
   }
@@ -891,8 +897,10 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = [], nu
   setTitle(heading());
   // Zálohy, které jde odečíst: zaplacené, ještě neodečtené jinde (nebo už na téhle faktuře).
   const paidDeposits = others.invoices.filter(i => isProforma(i) && i.status === 'paid' && (!i.settled_by || i.settled_by.id === id));
-  const knownDeposits = new Map([...(inv.deposits || []), ...paidDeposits.map(p => ({ id: p.id, number: p.number, paid_date: p.paid_date, amount: p.total }))]
-    .map(d => [d.id, d]));
+  const knownDeposits = new Map([...(inv.deposits || []), ...paidDeposits.map(depositOf)]
+    .sort((a, b) => a.paid_date.localeCompare(b.paid_date) || a.id - b.id).map(d => [d.id, d]));
+  const unpaidDeposits = others.invoices.filter(i => isProforma(i) && i.status === 'issued')
+    .sort((a, b) => a.issue_date.localeCompare(b.issue_date) || a.id - b.id);
   const currentSupplier = Object.fromEntries(SUPPLIER_FIELDS.map(k => [k, settings[k] ?? '']));
   const supplierChanged = id && !inv.imported && !sameData(inv.supplier, currentSupplier, SUPPLIER_FIELDS);
 
@@ -1052,13 +1060,18 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = [], nu
       const p = paidDeposits.find(x => x.id === d.id);
       return state.deposits.has(d.id) || (p && sameCustomer(p, state.contactId, state.customer));
     });
-    depositsBox.innerHTML = state.kind === 'invoice' && list.length ? `
+    const unpaid = unpaidDeposits.filter(p => sameCustomer(p, state.contactId, state.customer));
+    depositsBox.innerHTML = state.kind === 'invoice' && (list.length || unpaid.length) ? `
       <div class="deposits">
-        <h3>Zaplacené zálohy</h3>
+        <h3>Zálohy</h3>
         ${list.map(d => `
           <label class="check"><input type="checkbox" data-deposit="${d.id}" ${state.deposits.has(d.id) ? 'checked' : ''}>
             <span>Odečíst zálohu ${esc(d.number)} <span class="muted">zaplacenou ${Fmt.date(d.paid_date)}</span></span>
             <span class="num">−${Fmt.money(d.amount)}</span></label>`).join('')}
+        ${unpaid.map(p => `
+          <label class="check muted"><input type="checkbox" disabled>
+            <span>Záloha <a href="#/faktura/${p.id}">${esc(p.number)}</a> ještě není zaplacená, odečíst jde až po zaplacení</span>
+            <span class="num">${Fmt.money(p.total)}</span></label>`).join('')}
       </div>` : '';
     updateTotals();
   };
@@ -1099,7 +1112,10 @@ function renderInvoiceForm(inv, id, settings, contacts, others, offered = [], nu
     });
     total = round2(total);
     const payable = toPay({ total, deposits: chosenDeposits().map(d => knownDeposits.get(d)) });
-    $('#total-label').textContent = chosenDeposits().length ? `Celkem ${Fmt.money(total)} · zbývá k úhradě` : 'Celkem k úhradě';
+    const label = $('#total-label');
+    label.textContent = payable < 0 ? `Zálohy jsou o ${Fmt.money(-payable)} vyšší než faktura – přidej položky, nebo některou zálohu neodečítej`
+      : chosenDeposits().length ? `Celkem ${Fmt.money(total)} · zálohy −${Fmt.money(total - payable)} · zbývá k úhradě` : 'Celkem k úhradě';
+    label.className = payable < 0 ? 'bad' : 'muted';
     $('#total').textContent = Fmt.money(payable);
     updateLimits(total, payable);
   };

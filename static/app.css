@@ -414,6 +414,8 @@ table.items tbody tr { animation: fade 0.2s; }
 .deposits h3 { font-size: 13px; font-weight: 500; color: var(--muted); margin: 0 0 4px; }
 .deposits .check { display: flex; }
 .deposits .check .num { margin-left: auto; font-variant-numeric: tabular-nums; }
+.deposits .check.muted { color: var(--muted); cursor: default; }
+.total-row .bad { color: var(--bad-text); }
 .form-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
 
 /* ---------- dialog ---------- */

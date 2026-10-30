@@ -217,6 +217,19 @@ class DataTests(TempData):
             db.delete_invoices(data, [p["id"], other["id"]])
             self.assertEqual([i["number"] for i in data["invoices"]], ["1"])
 
+    def test_several_proformas_on_one_invoice(self):
+        with db.open_data(True) as data:
+            a, b = (db.save_invoice(data, invoice(f"Z{n}", kind="proforma", status="paid", paid_date=f"{YEAR}-02-1{n}",
+                                                  items=[{"description": "Záloha", "price": 300}]))
+                    for n in (1, 2))
+            final = db.save_invoice(data, invoice("1", deposits=[a["id"], b["id"], a["id"]]))
+            self.assertEqual([d["number"] for d in final["deposits"]], ["Z1", "Z2"])
+            self.assertEqual(db.to_pay(final), 400.0)
+            self.assertEqual({db.invoice_view(data, p)["settled_by"]["number"] for p in (a, b)}, {"1"})
+            # jednu zálohu jde z faktury zase odebrat
+            final = db.save_invoice(data, invoice("1", deposits=[b["id"]]), final["id"])
+            self.assertEqual((db.to_pay(final), db.invoice_view(data, a)["settled_by"]), (700.0, None))
+
     def test_deposits_cannot_exceed_invoice(self):
         with db.open_data(True) as data:
             p = db.save_invoice(data, invoice("Z1", kind="proforma", status="paid", paid_date=f"{YEAR}-02-10"))
